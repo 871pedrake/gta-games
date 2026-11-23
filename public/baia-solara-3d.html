@@ -1,0 +1,3041 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Baía Solara 3D — Cidade Litorânea, Multidão Inteligente & Trânsito</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #0d081d; color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      user-select: none;
+    }
+    #canvas-container { position: fixed; inset: 0; z-index: 1; }
+    #debug-labels-canvas { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
+
+    /* Coluna esquerda: Minimapa + Painel de Debug */
+    #left-hud {
+      position: fixed; top: 14px; left: 14px; z-index: 10;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .hud-card {
+      background: rgba(14, 10, 28, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 12px; padding: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+    #minimap { display: block; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+    .minimap-legend { display: flex; gap: 8px; font-size: 11px; color: #cbd5e1; margin-top: 6px; justify-content: center; }
+
+    #debug-toggle-btn {
+      width: 100%; background: rgba(14, 10, 28, 0.9); color: #94a3b8;
+      border: 1px solid rgba(255,255,255,0.14); border-radius: 10px;
+      padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    #debug-toggle-btn:hover { color: #f8fafc; border-color: rgba(34,211,238,0.45); }
+    #debug-panel { font-size: 11px; min-width: 215px; display: none; }
+    .dbg-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 3px; }
+    .dbg-row:first-child { margin-top: 0; }
+    .dbg-lbl { color: #94a3b8; }
+    .dbg-val { font-variant-numeric: tabular-nums; font-weight: 700; color: #f8fafc; }
+    .dbg-section { margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.1); }
+    .dbg-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94a3b8; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+    .dbg-qual { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
+    .dbg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 7px; }
+    .dbg-btn {
+      background: #1b1533; color: #e2e8f0; border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 7px; padding: 5px 7px; font-size: 11px; font-weight: 600; cursor: pointer;
+    }
+    .dbg-btn:hover { background: #29204a; }
+    .dbg-btn.on-cyan { background: #0891b2; border-color: #22d3ee; color: #fff; }
+    .dbg-btn.on-pink { background: #db2777; border-color: #f472b6; color: #fff; }
+    .dbg-btn.on-amber { background: #d97706; border-color: #fbbf24; color: #fff; }
+    .dbg-btn.on-sky { background: #0284c7; border-color: #38bdf8; color: #fff; }
+    .zone-alert-badge { font-size: 9px; font-weight: 800; color: #fb7185; background: rgba(244,63,94,0.16); padding: 1px 5px; border-radius: 4px; display: none; }
+
+    /* HUD superior direito: Dinheiro, Procurado, Relógio 24h e Lataria */
+    #status-hud {
+      position: fixed; top: 14px; right: 14px; z-index: 10;
+      min-width: 220px; text-align: right; padding: 12px 15px;
+    }
+    #money-display { font-size: 24px; font-weight: 800; color: #34d399; font-variant-numeric: tabular-nums; }
+    #stars-display { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; font-size: 20px; }
+    .star-off { color: rgba(255, 255, 255, 0.18); }
+    .star-on { color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.75); }
+    #clock-display { font-size: 13px; color: #38bdf8; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
+    #day-display { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+    #car-hud { display: none; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,0.1); }
+    #car-hp-track { width: 100%; height: 6px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden; margin-top: 4px; }
+    #car-hp-fill { height: 100%; width: 100%; background: #34d399; transition: width 0.15s ease; }
+
+    /* Missão, Avisos e Dock inferior */
+    #mission-box {
+      position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10;
+      text-align: center; max-width: 440px; padding: 10px 16px;
+    }
+    #mission-title { font-size: 13px; font-weight: 700; color: #facc15; }
+    #mission-desc { font-size: 12px; color: #e2e8f0; margin-top: 2px; }
+
+    #toast {
+      position: fixed; top: 96px; left: 50%; transform: translateX(-50%); z-index: 12;
+      background: rgba(23, 15, 46, 0.95); border: 1px solid rgba(244, 114, 182, 0.6);
+      color: #fff; font-weight: 700; font-size: 13px; padding: 8px 16px; border-radius: 8px; display: none;
+    }
+    #enter-prompt {
+      position: fixed; bottom: 78px; left: 50%; transform: translateX(-50%); z-index: 10;
+      background: rgba(14, 10, 28, 0.92); border: 1px solid #16f2d4; color: #16f2d4;
+      padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; display: none;
+    }
+    #bottom-dock {
+      position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 10;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center;
+      padding: 8px 14px; max-width: 95vw;
+    }
+    .btn {
+      background: #1b1533; color: #f8fafc; border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 8px; padding: 6px 11px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .btn:hover { background: #29204a; }
+    .btn-pink { background: #db2777; border-color: #f472b6; }
+    .btn-cyan { background: #0891b2; border-color: #22d3ee; }
+    .controls-hint { font-size: 11px; color: #94a3b8; padding-left: 4px; }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <canvas id="debug-labels-canvas"></canvas>
+
+  <!-- Minimapa e Painel de Debug -->
+  <div id="left-hud">
+    <div class="hud-card">
+      <canvas id="minimap" width="156" height="156"></canvas>
+      <div class="minimap-legend">
+        <span style="color:#ff2e93">M1</span> ·
+        <span style="color:#16f2d4">M2</span> ·
+        <span style="color:#fbbf24">Ônibus</span> ·
+        <span style="color:#ffffff">SAMU</span> ·
+        <span style="color:#ef4444">Polícia</span>
+      </div>
+    </div>
+
+    <button id="debug-toggle-btn">[F3] Debug <span id="dbg-toggle-state" style="color:#64748b">Oculto</span></button>
+
+    <div class="hud-card" id="debug-panel">
+      <div class="dbg-row"><span class="dbg-lbl">FPS</span><span class="dbg-val" id="dbg-fps" style="color:#22d3ee">60</span></div>
+      <div class="dbg-row"><span class="dbg-lbl">Visíveis / Orçamento</span><span class="dbg-val" id="dbg-npcs">0 / 200</span></div>
+      <div class="dbg-row"><span class="dbg-lbl">Pool remoto (baixa fid.)</span><span class="dbg-val" id="dbg-bg" style="color:#cbd5e1">0</span></div>
+      <div class="dbg-row"><span class="dbg-lbl">Dentro de prédios</span><span class="dbg-val" id="dbg-inside" style="color:#38bdf8">0</span></div>
+      <div class="dbg-row"><span class="dbg-lbl">LOD (C / M / B)</span><span class="dbg-val" id="dbg-lod" style="color:#34d399">0 / 0 / 0</span></div>
+      <div class="dbg-row"><span class="dbg-lbl">Ragdolls em uso</span><span class="dbg-val" id="dbg-ragdolls" style="color:#fbbf24">0 / 30</span></div>
+      <div class="dbg-row"><span class="dbg-lbl">Feridos (máx 30) / SAMU</span><span class="dbg-val" id="dbg-injured" style="color:#f472b6">0 / 0</span></div>
+      <div class="dbg-section">
+        <div class="dbg-title">
+          <span>Densidade por Zona (6m)</span>
+          <span class="zone-alert-badge" id="dbg-zone-alert">ALERTA</span>
+        </div>
+        <div id="dbg-zones"></div>
+      </div>
+      <div class="dbg-section">
+        <div class="dbg-title"><span>Qualidade</span><span id="dbg-qual-lbl" style="color:#22d3ee">Médio (200)</span></div>
+        <div class="dbg-qual">
+          <button class="dbg-btn" id="btn-qual-low">Baixo</button>
+          <button class="dbg-btn on-cyan" id="btn-qual-med">Médio</button>
+          <button class="dbg-btn" id="btn-qual-high">Alto</button>
+        </div>
+      </div>
+      <div class="dbg-grid">
+        <button class="dbg-btn" id="btn-speed">1x (T)</button>
+        <button class="dbg-btn" id="btn-spawn10">+10 (K)</button>
+        <button class="dbg-btn" id="btn-labels">Rotinas (H)</button>
+        <button class="dbg-btn" id="btn-colliders">Colis. (P)</button>
+      </div>
+      <button class="dbg-btn" id="btn-waypoints" style="width:100%;margin-top:6px;">Waypoints: OFF (G)</button>
+    </div>
+  </div>
+
+  <!-- Objetivo da Missão -->
+  <div class="hud-card" id="mission-box">
+    <div id="mission-title">Modo Livre — Baía Solara</div>
+    <div id="mission-desc">Explore a cidade, observe as rotinas por horário ou inicie uma missão.</div>
+  </div>
+
+  <!-- Dinheiro, Estrelas, Relógio 24h, Trânsito e Lataria -->
+  <div class="hud-card" id="status-hud">
+    <div id="money-display">$ 500</div>
+    <div id="stars-display">
+      <span class="star-off">★</span><span class="star-off">★</span><span class="star-off">★</span>
+    </div>
+    <div id="clock-display">17:30 · Pôr do Sol</div>
+    <div id="day-display">Dia 1 · Dia Útil (1x)</div>
+    <div id="weather-display" style="font-size:11px;color:#e2e8f0;margin-top:3px;font-weight:600;">Céu Limpo · Pista 100%</div>
+    <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.1);font-size:11px;">
+      <div class="dbg-row"><span class="dbg-lbl">Semáforo</span><span id="signal-display" style="color:#22f59a;font-weight:700;">Via N-S Verde</span></div>
+      <div class="dbg-row"><span class="dbg-lbl">Ônibus (2)</span><span id="bus-display" style="color:#fbbf24;font-weight:700;">0 embarcado(s)</span></div>
+      <div class="dbg-row"><span class="dbg-lbl">SAMU</span><span id="samu-display" style="color:#38bdf8;font-weight:700;">Pronta</span></div>
+    </div>
+    <div id="car-hud">
+      <div class="dbg-row"><span id="car-name" style="color:#cbd5e1">Cupê</span><span id="speed-display" style="color:#22d3ee;font-weight:700">0 km/h</span></div>
+      <div class="dbg-row" style="font-size:11px"><span class="dbg-lbl">Lataria</span><span id="car-hp-txt" style="color:#34d399;font-weight:700">100%</span></div>
+      <div id="car-hp-track"><div id="car-hp-fill"></div></div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <div id="enter-prompt">Pressione [F] para entrar no veículo</div>
+
+  <div class="hud-card" id="bottom-dock">
+    <button class="btn btn-pink" id="btn-m1">Missão 1: Carga Quente</button>
+    <button class="btn btn-cyan" id="btn-m2">Missão 2: Maleta da Orla</button>
+    <button class="btn" id="btn-time">+4h Horário</button>
+    <button class="btn" id="btn-weather">Clima (C)</button>
+    <span class="controls-hint">WASD Mover · F Carro · C Clima · B Buzina · F3 Debug · T Tempo · H Rotinas · P Colisores · K +10 NPCs · G Waypoints</span>
+  </div>
+
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    // =========================================================================
+    // CONSTANTES CENTRAIS DE AJUSTE (ETAPA 1 — NPCs, LOD E DESEMPENHO)
+    // =========================================================================
+    const MAX_NPC_POOL = 600;
+    const MAX_NPC_VISIBLE = 200;
+    const SIDEWALK_SPACING = 6.0;
+    const CELL_MAX_BUDGET = 1;
+    const SPAWN_MIN_DIST = 80.0;
+    const DESPAWN_OUT_FRUSTUM_DIST = 68.0;
+    const SIM_MAX_RADIUS = 150.0;
+    const NPC_AVG_HEIGHT = 1.75;
+    const NPC_HEIGHT_VARIATION = 0.08;
+    const MAX_SIMULATED_INJURED = 30;
+    const LOD_FULL_DIST = 25.0;
+    const LOD_MID_DIST = 70.0;
+    const LOD_LOW_DIST = 150.0;
+    const SUN_INTENSITY = 2.0;
+    const QUALITY_SETTINGS = {
+      low: { label: 'Baixo', maxVisibleNpcs: 150, maxPixelRatio: 1.0, shadows: false },
+      medium: { label: 'Médio', maxVisibleNpcs: 200, maxPixelRatio: 1.5, shadows: true },
+      high: { label: 'Alto', maxVisibleNpcs: 250, maxPixelRatio: 2.0, shadows: true },
+    };
+
+    // =========================================================================
+    // CONFIGURAÇÃO DO RENDERIZADOR, CENA, CÂMERA E ÁUDIO PROCEDURAL
+    // =========================================================================
+    const container = document.getElementById('canvas-container');
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, QUALITY_SETTINGS.medium.maxPixelRatio));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.shadowMap.enabled = QUALITY_SETTINGS.medium.shadows;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xff5f8f);
+    scene.fog = new THREE.FogExp2(0x5c2356, 0.0052);
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.2, 520);
+
+    const hemiLight = new THREE.HemisphereLight(0xff8ec7, 0x26183d, 0.9);
+    scene.add(hemiLight);
+    const sunLight = new THREE.DirectionalLight(0xff8c42, SUN_INTENSITY);
+    sunLight.position.set(80, 42, -60);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.left = -110; sunLight.shadow.camera.right = 110;
+    sunLight.shadow.camera.top = 110; sunLight.shadow.camera.bottom = -110;
+    sunLight.shadow.bias = -0.0005;
+    scene.add(sunLight);
+
+    // Áudio Web Audio API leve para buzina, chuva, impacto cartoon e estrelinhas
+    class SimpleAudio {
+      constructor() { this.ctx = null; this.rainGain = null; }
+      unlock() {
+        if (!this.ctx) {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (Ctx) {
+            this.ctx = new Ctx();
+            const bufSize = this.ctx.sampleRate * 2;
+            const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+            const data = buf.getChannelData(0);
+            for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+            const src = this.ctx.createBufferSource();
+            src.buffer = buf; src.loop = true;
+            const bp = this.ctx.createBiquadFilter();
+            bp.type = 'bandpass'; bp.frequency.value = 1150; bp.Q.value = 0.65;
+            this.rainGain = this.ctx.createGain(); this.rainGain.gain.value = 0;
+            src.connect(bp); bp.connect(this.rainGain); this.rainGain.connect(this.ctx.destination);
+            src.start();
+          }
+        }
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+      }
+      setRainLevel(level) {
+        if (this.ctx && this.rainGain) {
+          this.rainGain.gain.setTargetAtTime(Math.max(0, Math.min(1, level)) * 0.045, this.ctx.currentTime, 0.25);
+        }
+      }
+      playImpact(strength = 0.7) {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(150 + strength * 90, now);
+        osc.frequency.exponentialRampToValueAtTime(42, now + 0.18);
+        g.gain.setValueAtTime(0.18 + strength * 0.14, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.connect(g); g.connect(this.ctx.destination);
+        osc.start(now); osc.stop(now + 0.21);
+      }
+      playStars() {
+        if (!this.ctx) return;
+        [880, 1175, 1480].forEach((freq, i) => {
+          const now = this.ctx.currentTime + i * 0.055;
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now);
+          g.gain.setValueAtTime(0.06, now);
+          g.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+          osc.connect(g); g.connect(this.ctx.destination);
+          osc.start(now); osc.stop(now + 0.13);
+        });
+      }
+      playHorn() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        [340, 425].forEach((f) => {
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(f, now);
+          g.gain.setValueAtTime(0.07, now);
+          g.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+          osc.connect(g); g.connect(this.ctx.destination);
+          osc.start(now); osc.stop(now + 0.27);
+        });
+      }
+    }
+    const audio = new SimpleAudio();
+
+    // =========================================================================
+    // CONSTRUÇÃO DO CENÁRIO LITORÂNEO
+    // =========================================================================
+    const ROAD_X = [-72, -12, 38];
+    const ROAD_Z = [-72, -12, 48];
+    const ROAD_W = 12;
+    const buildings = [];
+    const neonMats = [];
+    const trafficNsMats = [];
+    const trafficEwMats = [];
+
+    function groundHeightAt(x, z) {
+      if (x >= 57.5 && x <= 102 && Math.abs(z - 48) <= 4.5) return 0.58;
+      if (x >= 44 && x < 58) return 0.11;
+      if (x >= 58) return -((x - 58) / 52) * 1.15 + 0.05;
+      return 0;
+    }
+
+    const cityGround = new THREE.Mesh(
+      new THREE.PlaneGeometry(520, 620),
+      new THREE.MeshStandardMaterial({ color: 0x242238, roughness: 0.92 })
+    );
+    cityGround.rotation.x = -Math.PI / 2;
+    cityGround.position.set(-204, 0, 0);
+    cityGround.receiveShadow = true;
+    scene.add(cityGround);
+
+    const promMat = new THREE.MeshStandardMaterial({ color: 0xd8c6b8, roughness: 0.85, metalness: 0.04 });
+    const promenade = new THREE.Mesh(
+      new THREE.BoxGeometry(14, 0.14, 300),
+      promMat
+    );
+    promenade.position.set(51, 0.04, 0);
+    promenade.receiveShadow = true;
+    scene.add(promenade);
+
+    const beachGeo = new THREE.PlaneGeometry(52, 620, 8, 1);
+    beachGeo.rotateX(-Math.PI / 2);
+    const bPos = beachGeo.attributes.position;
+    for (let i = 0; i < bPos.count; i++) bPos.setY(i, -((bPos.getX(i) + 26) / 52) * 1.15);
+    beachGeo.computeVertexNormals();
+    const beach = new THREE.Mesh(beachGeo, new THREE.MeshStandardMaterial({ color: 0xe7c28e, roughness: 0.95 }));
+    beach.position.set(84, 0.05, 0);
+    beach.receiveShadow = true;
+    scene.add(beach);
+
+    const oceanGeo = new THREE.PlaneGeometry(460, 660, 32, 40);
+    oceanGeo.rotateX(-Math.PI / 2);
+    const oceanBaseY = new Float32Array(oceanGeo.attributes.position.count);
+    for (let i = 0; i < oceanBaseY.length; i++) oceanBaseY[i] = oceanGeo.attributes.position.getY(i);
+    const ocean = new THREE.Mesh(
+      oceanGeo,
+      new THREE.MeshStandardMaterial({ color: 0x0e6b9e, roughness: 0.18, metalness: 0.55, flatShading: true, transparent: true, opacity: 0.9 })
+    );
+    ocean.position.set(302, -0.45, 0);
+    scene.add(ocean);
+
+    const pier = new THREE.Mesh(
+      new THREE.BoxGeometry(44, 0.35, 9),
+      new THREE.MeshStandardMaterial({ color: 0x6b4730, roughness: 0.88 })
+    );
+    pier.position.set(80, 0.4, 48);
+    pier.receiveShadow = true;
+    scene.add(pier);
+
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x1b1c2d, roughness: 0.82, polygonOffset: true, polygonOffsetFactor: -1 });
+    const dashMat = new THREE.MeshBasicMaterial({ color: 0xffc864, polygonOffset: true, polygonOffsetFactor: -2 });
+    const zebraMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0, polygonOffset: true, polygonOffsetFactor: -3 });
+
+    ROAD_X.forEach((rx) => {
+      const road = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W, 280), roadMat);
+      road.rotation.x = -Math.PI / 2; road.position.set(rx, 0.03, 0); road.receiveShadow = true; scene.add(road);
+      for (let z = -124; z <= 124; z += 10) {
+        const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 4.2), dashMat);
+        dash.rotation.x = -Math.PI / 2; dash.position.set(rx, 0.05, z); scene.add(dash);
+      }
+    });
+    ROAD_Z.forEach((rz) => {
+      const road = new THREE.Mesh(new THREE.PlaneGeometry(240, ROAD_W), roadMat);
+      road.rotation.x = -Math.PI / 2; road.position.set(-26, 0.035, rz); road.receiveShadow = true; scene.add(road);
+    });
+
+    // Faixas de pedestres e semáforos nos 9 cruzamentos
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x1f2438, metalness: 0.5, roughness: 0.4 });
+    for (const rx of ROAD_X) {
+      for (const rz of ROAD_Z) {
+        for (let s = -4.2; s <= 4.2; s += 1.4) {
+          const z1 = new THREE.Mesh(new THREE.PlaneGeometry(0.65, 3.0), zebraMat);
+          z1.rotation.x = -Math.PI / 2; z1.position.set(rx + s, 0.055, rz - 7.8); scene.add(z1);
+          const z2 = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 0.65), zebraMat);
+          z2.rotation.x = -Math.PI / 2; z2.position.set(rx + 7.8, 0.055, rz + s); scene.add(z2);
+        }
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 4.4, 6), poleMat);
+        post.position.set(rx - 7.2, 2.2, rz - 7.2); scene.add(post);
+        const nsMat = new THREE.MeshBasicMaterial({ color: 0x22f59a });
+        const ewMat = new THREE.MeshBasicMaterial({ color: 0xff3355 });
+        trafficNsMats.push(nsMat); trafficEwMats.push(ewMat);
+        const l1 = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.35, 0.28), nsMat);
+        l1.position.set(rx - 7.2, 4.2, rz - 7.0); scene.add(l1);
+        const l2 = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.35, 0.28), ewMat);
+        l2.position.set(rx - 7.0, 4.2, rz - 7.2); scene.add(l2);
+      }
+    }
+
+    // Prédios com nomes e categorias
+    const buildingDefs = [
+      [-100, -100, 20, 18, 24, 0x352754, 0xff2e93, 'Torre Solara', 'home'],
+      [-42, -100, 22, 16, 18, 0x2f355e, 0x00f5d4, 'Mirante Oceano', 'workplace'],
+      [14, -100, 18, 18, 28, 0x46264e, 0xff7b29, 'Hotel Neon', 'workplace'],
+      [-98, -42, 22, 20, 14, 0x2d3a58, 0xff8c38, 'Galpão Porto', 'workplace'],
+      [-46, -44, 18, 16, 11, 0x3c2b56, 0xff3b9a, 'Garagem Central', 'workplace'],
+      [14, -44, 20, 18, 26, 0x3b2048, 0xff2a85, 'Plaza Atlântico', 'workplace'],
+      [-98, 18, 20, 20, 22, 0x283655, 0x00e5ff, 'Residencial Brisa', 'home'],
+      [-42, 18, 22, 18, 16, 0x4b2d52, 0xff7b29, 'Clube Flamingo', 'bar'],
+      [14, 18, 18, 20, 20, 0x312c59, 0xff3b9a, 'Edifício Coral', 'home'],
+      [-98, 86, 22, 20, 17, 0x2a3a54, 0x16f2d4, 'Estúdio Sul', 'home'],
+      [-42, 84, 20, 18, 24, 0x472852, 0xff477e, 'Cassino Maré', 'bar'],
+      [14, 84, 18, 18, 14, 0x35325c, 0xff9f1c, 'Capitania Marina', 'workplace'],
+    ];
+
+    buildingDefs.forEach(([x, z, w, d, h, col, neon, label, cat]) => {
+      const grp = new THREE.Group();
+      grp.position.set(x, 0, z);
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({ color: col, roughness: 0.72 })
+      );
+      body.position.y = h / 2; body.castShadow = true; body.receiveShadow = true; grp.add(body);
+      const nMat = new THREE.MeshStandardMaterial({ color: neon, emissive: neon, emissiveIntensity: 1.5 });
+      neonMats.push(nMat);
+      const trim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.35, 0.42, d + 0.35), nMat);
+      trim.position.y = h - 0.55; grp.add(trim);
+      scene.add(grp);
+      buildings.push({ x, z, halfW: w / 2, halfD: d / 2, height: h, label, cat });
+    });
+
+    // POIs urbanos e litorâneos (bancos, barracas, pontos de ônibus, vôlei, bares)
+    const WORLD_POIS = {
+      benches: [{ x: 48.5, z: -48, yaw: Math.PI / 2 }, { x: 48.5, z: 12, yaw: Math.PI / 2 }, { x: 48.5, z: 72, yaw: Math.PI / 2 }],
+      stalls: [{ x: 54.5, z: -26, yaw: -Math.PI / 2, cx: 52.3, cz: -26 }, { x: 60.5, z: 24, yaw: -Math.PI / 2, cx: 58.3, cz: 24 }],
+      busStops: [
+        { x: 45.2, z: 12, waitX: 46.8, waitZ: 12, yaw: -Math.PI / 2, roadStopX: 40.8, roadStopZ: 12, axis: 'z', dir: 1, label: 'Orla Maré' },
+        { x: -4.8, z: -40, waitX: -3.2, waitZ: -40, yaw: -Math.PI / 2, roadStopX: -9.2, roadStopZ: -40, axis: 'z', dir: 1, label: 'Centro Garagem' },
+        { x: -79.2, z: 20, waitX: -80.8, waitZ: 20, yaw: Math.PI / 2, roadStopX: -74.8, roadStopZ: 20, axis: 'z', dir: -1, label: 'Plaza Atlântico' },
+        { x: -24, z: -64.8, waitX: -24, waitZ: -63.2, yaw: Math.PI, roadStopX: -24, roadStopZ: -69.2, axis: 'x', dir: 1, label: 'Residencial Brisa' },
+      ],
+      volleyballCenter: { x: 68, z: -12 },
+      nightBars: [{ x: 48.5, z: -86 }, { x: -34, z: 20 }],
+    };
+
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x8c5a3c, roughness: 0.85 });
+    const shelterFrameMat = new THREE.MeshStandardMaterial({ color: 0x2a2f45, metalness: 0.65, roughness: 0.35 });
+    const shelterGlassMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.35, roughness: 0.1 });
+    const shelterSignMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xca8a04, emissiveIntensity: 0.6 });
+    WORLD_POIS.benches.forEach((b) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, 2.2), woodMat);
+      m.position.set(b.x, 0.35, b.z); scene.add(m);
+    });
+    WORLD_POIS.stalls.forEach((s) => {
+      const base = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.1, 3.0), woodMat);
+      base.position.set(s.x, 0.65, s.z); scene.add(base);
+      const top = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.25, 3.4), new THREE.MeshStandardMaterial({ color: 0xff2e93, emissive: 0xff2e93, emissiveIntensity: 0.5 }));
+      top.position.set(s.x, 2.5, s.z); scene.add(top);
+    });
+    WORLD_POIS.busStops.forEach((bs) => {
+      const grp = new THREE.Group();
+      grp.position.set(bs.x, 0.05, bs.z); grp.rotation.y = bs.yaw;
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.14, 1.5), shelterFrameMat); roof.position.y = 2.75;
+      const back = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.4, 0.1), shelterGlassMat); back.position.set(0, 1.4, -0.65);
+      const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.1, 6), shelterFrameMat); sp.position.set(1.9, 1.55, 0);
+      const sb = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.65, 0.1), shelterSignMat); sb.position.set(1.9, 2.85, 0);
+      grp.add(roof, back, sp, sb); scene.add(grp);
+    });
+
+    // =========================================================================
+    // CLASSE 1: BuildingRegistry
+    // Registra prédios, portas nas calçadas, locais de lazer e colisores (Tecla P)
+    // =========================================================================
+    class BuildingRegistry {
+      constructor(buildingList) {
+        this.places = [];
+        this.homes = [];
+        this.workplaces = [];
+        this.markets = [];
+        this.bars = [];
+        this.beaches = [];
+        this.plazas = [];
+        this.shelters = [];
+        this.staticObstacles = [];
+        this.staticColliderGroup = null;
+        this.dynamicColliderGroup = null;
+        this.carBoxes = [];
+        this.npcCapsules = null;
+
+        // Cadastra portas de prédios voltadas para a via mais próxima
+        buildingList.forEach((b, idx) => {
+          const doorSouth = b.z < 0;
+          const place = {
+            id: `bld_${idx}`,
+            name: b.label,
+            category: b.cat,
+            x: b.x,
+            z: b.z,
+            entryX: b.x,
+            entryZ: doorSouth ? b.z + b.halfD + 1.4 : b.z - b.halfD - 1.4,
+            hasInterior: true,
+            insideCount: 0,
+          };
+          this.addPlace(place);
+
+          if (b.label === 'Garagem Central' || b.label === 'Residencial Brisa') {
+            this.addPlace({
+              id: `mkt_${idx}`,
+              name: b.label === 'Garagem Central' ? 'Mercado Solara' : 'Academia Brisa',
+              category: 'market_gym',
+              x: b.x + b.halfW + 1.5,
+              z: b.z,
+              entryX: b.x + b.halfW + 2.2,
+              entryZ: b.z,
+              hasInterior: true,
+              insideCount: 0,
+            });
+          }
+        });
+
+        // Cadastra pontos externos de lazer (bares, praia, calçadão) e abrigos
+        WORLD_POIS.nightBars.forEach((bar, i) => {
+          this.addPlace({ id: `bar_${i}`, name: `Bar Orla ${i + 1}`, category: 'bar', x: bar.x, z: bar.z, entryX: bar.x, entryZ: bar.z + 2.2, hasInterior: false, insideCount: 0 });
+        });
+        WORLD_POIS.stalls.forEach((st, i) => {
+          const p = { id: `stall_${i}`, name: `Barraca ${i + 1}`, category: st.x > 56 ? 'beach' : 'plaza', x: st.x, z: st.z, entryX: st.cx, entryZ: st.cz, hasInterior: false, insideCount: 0 };
+          this.addPlace(p);
+          this.shelters.push(p);
+        });
+        WORLD_POIS.busStops.forEach((bs, i) => {
+          this.shelters.push({ id: `bus_${i}`, name: `Parada ${bs.label}`, category: 'plaza', x: bs.x, z: bs.z, entryX: bs.waitX, entryZ: bs.waitZ, hasInterior: false, insideCount: 0 });
+        });
+        this.addPlace({ id: 'beach_volley', name: 'Quadra Praia', category: 'beach', x: 68, z: -12, entryX: 65, entryZ: -12, hasInterior: false, insideCount: 0 });
+        this.addPlace({ id: 'plaza_prom', name: 'Calçadão', category: 'plaza', x: 50.5, z: -4, entryX: 50.5, entryZ: -4, hasInterior: false, insideCount: 0 });
+
+        // Obstáculos estáticos para colisão leve de NPCs
+        WORLD_POIS.benches.forEach((b) => this.staticObstacles.push({ x: b.x, z: b.z, radius: 1.15, height: 1.0 }));
+        WORLD_POIS.stalls.forEach((s) => this.staticObstacles.push({ x: s.x, z: s.z, radius: 1.5, height: 2.6 }));
+        WORLD_POIS.busStops.forEach((bs) => this.staticObstacles.push({ x: bs.x, z: bs.z, radius: 1.4, height: 2.8 }));
+      }
+
+      addPlace(p) {
+        this.places.push(p);
+        if (p.category === 'home') this.homes.push(p);
+        else if (p.category === 'workplace') this.workplaces.push(p);
+        else if (p.category === 'market_gym') this.markets.push(p);
+        else if (p.category === 'bar') this.bars.push(p);
+        else if (p.category === 'beach') this.beaches.push(p);
+        else this.plazas.push(p);
+        if (p.hasInterior || p.category === 'bar') this.shelters.push(p);
+      }
+
+      findNearestShelter(x, z, preferInterior) {
+        let best = null, bestD = Infinity;
+        for (const s of this.shelters) {
+          if (preferInterior && !s.hasInterior) continue;
+          const d = (s.entryX - x) ** 2 + (s.entryZ - z) ** 2;
+          if (d < bestD) { bestD = d; best = s; }
+        }
+        if (!best) {
+          for (const s of this.shelters) {
+            const d = (s.entryX - x) ** 2 + (s.entryZ - z) ** 2;
+            if (d < bestD) { bestD = d; best = s; }
+          }
+        }
+        return best;
+      }
+
+      getTotalInsideCount() {
+        let total = 0;
+        for (const p of this.places) total += p.insideCount;
+        return total;
+      }
+
+      // Cria malhas wireframe de debug para colisores (Tecla P)
+      getDebugColliderGroups(buildingList, vehicleList, maxNpcs) {
+        if (!this.staticColliderGroup) {
+          const grp = new THREE.Group();
+          const bMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.7 });
+          buildingList.forEach((b) => {
+            const wire = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(b.halfW * 2, b.height, b.halfD * 2)), bMat);
+            wire.position.set(b.x, b.height / 2, b.z);
+            grp.add(wire);
+          });
+          const doorMat = new THREE.MeshBasicMaterial({ color: 0x22f59a, wireframe: true });
+          const doorGeo = new THREE.BoxGeometry(1.4, 2.2, 1.4);
+          this.places.forEach((p) => {
+            if (!p.hasInterior) return;
+            const dm = new THREE.Mesh(doorGeo, doorMat);
+            dm.position.set(p.entryX, 1.1, p.entryZ);
+            grp.add(dm);
+          });
+          const obsMat = new THREE.MeshBasicMaterial({ color: 0xff8c38, wireframe: true });
+          this.staticObstacles.forEach((o) => {
+            const cyl = new THREE.Mesh(new THREE.CylinderGeometry(o.radius, o.radius, o.height, 8), obsMat);
+            cyl.position.set(o.x, o.height / 2, o.z);
+            grp.add(cyl);
+          });
+          this.staticColliderGroup = grp;
+        }
+        if (!this.dynamicColliderGroup) {
+          const dyn = new THREE.Group();
+          const carMat = new THREE.LineBasicMaterial({ color: 0xff2e93 });
+          this.carBoxes = vehicleList.map((v) => {
+            const wire = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(v.halfWidth * 2, 1.6, v.halfLength * 2)), carMat);
+            dyn.add(wire);
+            return wire;
+          });
+          const capGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.7, 6);
+          capGeo.translate(0, 0.85, 0);
+          this.npcCapsules = new THREE.InstancedMesh(capGeo, new THREE.MeshBasicMaterial({ color: 0xfacc15, wireframe: true }), maxNpcs);
+          this.npcCapsules.frustumCulled = false;
+          dyn.add(this.npcCapsules);
+          this.dynamicColliderGroup = dyn;
+        }
+        return { staticGroup: this.staticColliderGroup, dynamicGroup: this.dynamicColliderGroup };
+      }
+
+      updateDynamicColliders(vehicleList, npcBuffer) {
+        vehicleList.forEach((v, i) => {
+          const box = this.carBoxes[i];
+          if (!box) return;
+          box.position.set(v.x, v.mesh.position.y + 0.85, v.z);
+          box.rotation.y = v.heading;
+        });
+        if (this.npcCapsules) {
+          const m = new THREE.Matrix4();
+          for (let i = 0; i < npcBuffer.length; i++) {
+            const a = npcBuffer[i];
+            if (!a.active || a.inside) m.makeScale(0, 0, 0);
+            else m.makeTranslation(a.x, a.y, a.z);
+            this.npcCapsules.setMatrixAt(i, m);
+          }
+          this.npcCapsules.instanceMatrix.needsUpdate = true;
+        }
+      }
+    }
+
+    // =========================================================================
+    // CLASSE 2: ScheduleSystem
+    // Agenda diária dirigida exclusivamente por gameTime (0–24h) e isWeekend
+    // =========================================================================
+    class ScheduleSystem {
+      createProfile(seed, registry) {
+        const rand = (n) => Math.abs(Math.sin(seed * 12.9898 + n * 78.233) * 43758.5453) % 1;
+        const rProf = rand(1);
+        const profession =
+          rProf < 0.22 ? 'tourist' : rProf < 0.44 ? 'executive' : rProf < 0.64 ? 'worker' :
+          rProf < 0.78 ? 'runner' : rProf < 0.88 ? 'volleyball' : rProf < 0.95 ? 'skater' : 'guard';
+
+        const persPool = ['calm', 'hurried', 'curious', 'fearful'];
+        const personality = persPool[Math.floor(rand(2) * persPool.length)];
+        const home = registry.homes[Math.floor(rand(3) * registry.homes.length)];
+        const workplace = registry.workplaces[Math.floor(rand(4) * registry.workplaces.length)];
+        const marketSpot = registry.markets[Math.floor(rand(5) * registry.markets.length)] || workplace;
+
+        let favPool = registry.plazas;
+        if (profession === 'volleyball' || profession === 'tourist' || personality === 'curious') {
+          favPool = rand(6) < 0.55 ? registry.beaches : registry.bars;
+        } else if (personality === 'hurried' || profession === 'executive') {
+          favPool = registry.bars;
+        }
+        const favoriteSpot = favPool[Math.floor(rand(7) * favPool.length)] || registry.bars[0];
+        const scheduleOffsetHours = (rand(8) - 0.5) * 1.0; // ±30 min por NPC
+
+        const hpByProf = { guard: 120, volleyball: 105, runner: 100, skater: 95, worker: 90, executive: 80, tourist: 70 };
+        const maxHealth = Math.max(60, Math.min(120, Math.round(hpByProf[profession] - 10 + rand(9) * 10)));
+
+        return { home, workplace, favoriteSpot, marketSpot, profession, personality, scheduleOffsetHours, maxHealth };
+      }
+
+      evaluate(profile, gameTime, isWeekend, seed) {
+        const t = (gameTime + profile.scheduleOffsetHours + 24) % 24;
+        const slot = seed % 100;
+        const isNightOwl = profile.profession === 'guard' || (profile.profession === 'runner' && t >= 5 && t < 8);
+
+        if (isWeekend) {
+          if (t >= 2.5 && t < 8.0) {
+            if (profile.profession === 'guard' || (profile.personality === 'curious' && slot < 12)) {
+              return { routineLabel: profile.profession === 'guard' ? 'Patrulha Noturna' : 'Passeio na Madrugada', targetHourLabel: '08:00', targetPlace: profile.profession === 'guard' ? profile.workplace : profile.favoriteSpot, shouldBeInside: false, wanderAround: true };
+            }
+            return { routineLabel: 'Dormindo em Casa', targetHourLabel: '08:00', targetPlace: profile.home, shouldBeInside: true, wanderAround: false };
+          }
+          if (t >= 8.0 && t < 10.0) {
+            return { routineLabel: 'Saindo para Lazer', targetHourLabel: '10:00', targetPlace: profile.favoriteSpot, shouldBeInside: false, wanderAround: true };
+          }
+          if (t >= 10.0 && t < 18.0) {
+            const goMkt = t >= 12.5 && t < 14.5 && slot % 3 === 0;
+            const restingHome = slot < 14;
+            return {
+              routineLabel: restingHome ? 'Em Casa' : goMkt ? 'Almoço / Mercado' : 'Lazer de Fim de Semana',
+              targetHourLabel: goMkt ? '14:30' : '18:00',
+              targetPlace: restingHome ? profile.home : goMkt ? profile.marketSpot : profile.favoriteSpot,
+              shouldBeInside: restingHome && profile.home.hasInterior,
+              wanderAround: !restingHome,
+            };
+          }
+          const lateHome = (t >= 23.0 || t < 2.5) && slot < 45;
+          return {
+            routineLabel: lateHome ? 'Descansando em Casa' : 'Lazer Noturno (Orla/Bar)',
+            targetHourLabel: '02:30',
+            targetPlace: lateHome ? profile.home : profile.favoriteSpot,
+            shouldBeInside: lateHome && profile.home.hasInterior,
+            wanderAround: !lateHome,
+          };
+        }
+
+        // Dia útil com ocupação coerente de interiores:
+        if (t >= 2.0 && t < 6.0) {
+          if (isNightOwl || (profile.personality === 'curious' && slot < 12)) {
+            return { routineLabel: profile.profession === 'guard' ? 'Turno Madrugada' : 'Madrugada na Orla', targetHourLabel: '06:00', targetPlace: profile.favoriteSpot, shouldBeInside: false, wanderAround: true };
+          }
+          return { routineLabel: 'Dormindo em Casa', targetHourLabel: '06:00', targetPlace: profile.home, shouldBeInside: true, wanderAround: false };
+        }
+        if (t >= 6.0 && t < 8.0) {
+          const stillWaking = t < 6.7 && slot < 40;
+          return { routineLabel: stillWaking ? 'Acordando em Casa' : 'Saindo de Casa', targetHourLabel: '08:00', targetPlace: profile.home, shouldBeInside: stillWaking && profile.home.hasInterior, wanderAround: !stillWaking };
+        }
+        if (t >= 8.0 && t < 9.0) return { routineLabel: 'Indo ao Trabalho', targetHourLabel: '09:00', targetPlace: profile.workplace, shouldBeInside: false, wanderAround: false };
+        if ((t >= 9.0 && t < 12.0) || (t >= 13.0 && t < 17.0)) {
+          if (profile.profession === 'tourist' || profile.profession === 'volleyball') {
+            return { routineLabel: 'Passeio / Praia', targetHourLabel: '17:00', targetPlace: profile.favoriteSpot, shouldBeInside: false, wanderAround: true };
+          }
+          const indoorShift = slot < 44 && profile.profession !== 'skater' && profile.profession !== 'runner';
+          const coffee = (t >= 10.2 && t < 10.75 && slot % 2 === 0) || (t >= 14.9 && t < 15.45 && slot % 3 === 0);
+          if (indoorShift && !coffee) {
+            return { routineLabel: 'No Trabalho', targetHourLabel: t < 12 ? '12:00' : '17:00', targetPlace: profile.workplace, shouldBeInside: profile.workplace.hasInterior, wanderAround: false };
+          }
+          return { routineLabel: coffee ? 'Pausa para Café' : 'Serviço Externo / Rua', targetHourLabel: t < 12 ? '12:00' : '17:00', targetPlace: slot % 2 === 0 ? profile.workplace : profile.marketSpot, shouldBeInside: false, wanderAround: true };
+        }
+        if (t >= 12.0 && t < 13.0) return { routineLabel: 'Almoço na Orla', targetHourLabel: '13:00', targetPlace: slot < 50 ? profile.marketSpot : profile.favoriteSpot, shouldBeInside: false, wanderAround: true };
+        if (t >= 17.0 && t < 19.0) {
+          const stopMkt = t < 18.2 && (profile.personality === 'hurried' || slot < 55);
+          const enterHome = !stopMkt && t >= 18.25 + (slot % 10) * 0.07;
+          return { routineLabel: stopMkt ? 'Mercado / Academia' : enterHome ? 'Em Casa' : 'Voltando para Casa', targetHourLabel: '19:00', targetPlace: stopMkt ? profile.marketSpot : profile.home, shouldBeInside: enterHome && profile.home.hasInterior, wanderAround: stopMkt };
+        }
+        const nightThreshold = 22.3 + (slot % 15) * 0.12;
+        if ((t >= nightThreshold || t < 2.0) && profile.profession !== 'guard' && slot < 62) {
+          return { routineLabel: 'Descansando em Casa', targetHourLabel: '06:00', targetPlace: profile.home, shouldBeInside: profile.home.hasInterior, wanderAround: false };
+        }
+        return { routineLabel: 'Vida Noturna / Lazer', targetHourLabel: '02:00', targetPlace: profile.favoriteSpot, shouldBeInside: false, wanderAround: true };
+      }
+
+      computeRemoteSpawnPosition(profile, gameTime, isWeekend, graph, seed) {
+        const directive = this.evaluate(profile, gameTime, isWeekend, seed);
+        if (directive.shouldBeInside && directive.targetPlace.hasInterior) {
+          return { x: directive.targetPlace.entryX, z: directive.targetPlace.entryZ, inside: true, directive };
+        }
+        const t = (gameTime + profile.scheduleOffsetHours + 24) % 24;
+        if (t >= 8.0 && t < 9.0) {
+          const alpha = t - 8.0;
+          const rx = profile.home.entryX + (profile.workplace.entryX - profile.home.entryX) * alpha;
+          const rz = profile.home.entryZ + (profile.workplace.entryZ - profile.home.entryZ) * alpha;
+          const node = graph.findClosestNode(rx, rz);
+          return { x: node.x, z: node.z, inside: false, directive };
+        }
+        const nearNode = graph.findClosestNode(directive.targetPlace.entryX, directive.targetPlace.entryZ);
+        return { x: nearNode.x + (Math.random() - 0.5) * 3, z: nearNode.z + (Math.random() - 0.5) * 3, inside: false, directive };
+      }
+    }
+
+    // =========================================================================
+    // GRAFO DE CALÇADAS E FAIXAS DE PEDESTRES (NavGraph)
+    // =========================================================================
+    class NavGraph {
+      constructor() {
+        this.nodes = [];
+        this.debugGroup = null;
+        this.signalTimer = 0;
+        this.nsGreen = true;
+        this.ewGreen = false;
+        this.buildSidewalkNetwork();
+      }
+      addNode(x, z, region, poiKind = null, poiYaw = 0) {
+        const id = this.nodes.length;
+        this.nodes.push({ id, x, z, region, poiKind, poiYaw, edges: [] });
+        return id;
+      }
+      connect(a, b, isCrosswalk = false, axis = 'ns') {
+        const na = this.nodes[a], nb = this.nodes[b];
+        if (!na || !nb) return;
+        const d = Math.hypot(nb.x - na.x, nb.z - na.z);
+        na.edges.push({ to: b, dist: d, isCrosswalk, axis });
+        nb.edges.push({ to: a, dist: d, isCrosswalk, axis });
+      }
+      buildSidewalkNetwork() {
+        const xBands = [-80, -64, -20, -4, 30, 46];
+        const zBands = [-80, -64, -20, -4, 40, 56];
+        const grid = [];
+        for (let xi = 0; xi < xBands.length; xi++) {
+          grid[xi] = [];
+          for (let zi = 0; zi < zBands.length; zi++) {
+            const x = xBands[xi], z = zBands[zi];
+            const region = x >= 45 ? 'promenade' : 'city';
+            grid[xi][zi] = this.addNode(x, z, region);
+          }
+        }
+        for (let xi = 0; xi < xBands.length; xi++) {
+          for (let zi = 0; zi < zBands.length; zi++) {
+            const cur = grid[xi][zi];
+            if (xi + 1 < xBands.length) this.connect(cur, grid[xi + 1][zi], xi % 2 === 0, 'ew');
+            if (zi + 1 < zBands.length) this.connect(cur, grid[xi][zi + 1], zi % 2 === 0, 'ns');
+          }
+        }
+        // Calçadão litorâneo e Praia
+        const promIds = [-104, -48, -26, 12, 32, 72, 98].map((z) => this.addNode(50.5, z, 'promenade'));
+        for (let i = 0; i < promIds.length - 1; i++) this.connect(promIds[i], promIds[i + 1]);
+        this.connect(promIds[1], grid[5][1]); this.connect(promIds[3], grid[5][3]); this.connect(promIds[4], grid[5][4]);
+
+        const beachIds = [-72, -32, -12, 24, 68].map((z) => this.addNode(64, z, 'beach'));
+        for (let i = 0; i < beachIds.length - 1; i++) this.connect(beachIds[i], beachIds[i + 1]);
+        this.connect(beachIds[0], promIds[0]); this.connect(beachIds[2], promIds[3]); this.connect(beachIds[3], promIds[4]);
+
+        // Nós de POIs
+        WORLD_POIS.benches.forEach((b) => {
+          const id = this.addNode(b.x, b.z, 'promenade', 'bench', b.yaw);
+          this.connect(id, this.findClosestNode(b.x, b.z, id).id);
+        });
+        WORLD_POIS.stalls.forEach((s) => {
+          const id = this.addNode(s.cx, s.cz, s.x > 56 ? 'beach' : 'promenade', 'stall', s.yaw);
+          this.connect(id, this.findClosestNode(s.cx, s.cz, id).id);
+        });
+        WORLD_POIS.busStops.forEach((bs) => {
+          const id = this.addNode(bs.waitX, bs.waitZ, 'city', 'bus_stop', bs.yaw);
+          this.connect(id, this.findClosestNode(bs.waitX, bs.waitZ, id).id);
+        });
+        const vId = this.addNode(65, -12, 'beach', 'volleyball', Math.PI / 2);
+        this.connect(vId, beachIds[2]);
+        WORLD_POIS.nightBars.forEach((bar) => {
+          const id = this.addNode(bar.x, bar.z + 2.2, 'night_bar', 'night_bar', 0);
+          this.connect(id, this.findClosestNode(bar.x, bar.z + 2.2, id).id);
+        });
+      }
+      findClosestNode(x, z, excludeId = -1) {
+        let best = this.nodes[0], bestD = Infinity;
+        for (const n of this.nodes) {
+          if (n.id === excludeId) continue;
+          const d = (n.x - x) ** 2 + (n.z - z) ** 2;
+          if (d < bestD) { bestD = d; best = n; }
+        }
+        return best;
+      }
+      updateTrafficSignals(dt) {
+        this.signalTimer = (this.signalTimer + dt) % 14;
+        this.nsGreen = this.signalTimer < 6;
+        this.ewGreen = this.signalTimer >= 7 && this.signalTimer < 13;
+        const nsHex = this.nsGreen ? 0x22f59a : 0xff3355;
+        const ewHex = this.ewGreen ? 0x22f59a : 0xff3355;
+        trafficNsMats.forEach((m) => m.color.setHex(nsHex));
+        trafficEwMats.forEach((m) => m.color.setHex(ewHex));
+      }
+      canCrossEdge(edge) {
+        if (!edge.isCrosswalk) return true;
+        return edge.axis === 'ns' ? this.nsGreen : this.ewGreen;
+      }
+      isVehicleAxisGreen(axis) {
+        return axis === 'z' ? this.nsGreen : this.ewGreen;
+      }
+      getSignalLabel() {
+        if (this.nsGreen) return 'Via N-S Verde';
+        if (this.ewGreen) return 'Via L-O Verde';
+        return 'Limpeza Cruzamento';
+      }
+      getDebugVisualGroup() {
+        if (this.debugGroup) return this.debugGroup;
+        const grp = new THREE.Group();
+        const segWalk = [], segCross = [];
+        for (const a of this.nodes) {
+          for (const e of a.edges) {
+            if (e.to <= a.id) continue;
+            const b = this.nodes[e.to];
+            const arr = e.isCrosswalk ? segCross : segWalk;
+            arr.push(a.x, 0.25, a.z, b.x, 0.25, b.z);
+          }
+        }
+        const gW = new THREE.BufferGeometry();
+        gW.setAttribute('position', new THREE.Float32BufferAttribute(segWalk, 3));
+        grp.add(new THREE.LineSegments(gW, new THREE.LineBasicMaterial({ color: 0x00e5ff })));
+        const gC = new THREE.BufferGeometry();
+        gC.setAttribute('position', new THREE.Float32BufferAttribute(segCross, 3));
+        grp.add(new THREE.LineSegments(gC, new THREE.LineBasicMaterial({ color: 0xfacc15 })));
+        this.debugGroup = grp;
+        return grp;
+      }
+    }
+
+    // =========================================================================
+    // ZoneDensityManager & LODSystem (ETAPA 1)
+    // =========================================================================
+    const ALL_ZONE_IDS = ['praia', 'centro', 'residencial', 'parque', 'industrial'];
+    const ZONE_LABELS = { praia: 'Praia', centro: 'Centro', residencial: 'Residencial', parque: 'Parque', industrial: 'Industrial' };
+
+    class ZoneDensityManager {
+      constructor() {
+        this.zoneCounts = { praia: 0, centro: 0, residencial: 0, parque: 0, industrial: 0 };
+        this.zoneLimits = { praia: 54, centro: 54, residencial: 42, parque: 30, industrial: 20 };
+        this.alerts = [];
+        this.cellCounts = new Map();
+      }
+      getZoneAt(x, z) {
+        if (x >= 44) return 'praia';
+        if (x >= -34 && z >= -62 && z < 44) return 'centro';
+        if ((x >= 16 && x < 44 && (z < -62 || z >= 44)) || (x >= -64 && x < -34 && z >= 22 && z < 56)) return 'parque';
+        if (x < -34 && z < 10) return 'industrial';
+        return 'residencial';
+      }
+      hashCell(cx, cz) { return ((cx + 128) << 9) | (cz + 128); }
+      updateLimits(gameTime, isWeekend, weather, maxVisibleBudget) {
+        const dayAngle = ((gameTime - 14) / 24) * Math.PI * 2;
+        const dayWeight = 0.5 + 0.5 * Math.cos(dayAngle);
+        const streetScale = 0.32 + dayWeight * 0.68;
+        const rainScale = weather === 'rain' ? 0.6 : weather === 'fog' ? 0.85 : 1.0;
+        const budgetScale = maxVisibleBudget / 200;
+        this.zoneLimits.praia = Math.max(6, Math.round((isWeekend ? 66 : 54) * (0.28 + dayWeight * 0.72) * rainScale * budgetScale));
+        this.zoneLimits.centro = Math.max(8, Math.round((isWeekend ? 40 : 58) * (0.32 + dayWeight * 0.68) * rainScale * budgetScale));
+        this.zoneLimits.residencial = Math.max(8, Math.round((isWeekend ? 42 : 40) * (0.45 + 0.55 * streetScale) * rainScale * budgetScale));
+        this.zoneLimits.parque = Math.max(4, Math.round((isWeekend ? 38 : 28) * (0.25 + dayWeight * 0.75) * rainScale * budgetScale));
+        this.zoneLimits.industrial = Math.max(4, Math.round((isWeekend ? 10 : 22) * (0.22 + dayWeight * 0.78) * rainScale * budgetScale));
+      }
+      beginFrame() {
+        for (const z of ALL_ZONE_IDS) this.zoneCounts[z] = 0;
+        this.alerts.length = 0;
+        this.cellCounts.clear();
+      }
+      recordVisibleNpc(x, z) {
+        const zone = this.getZoneAt(x, z);
+        this.zoneCounts[zone]++;
+        const k = this.hashCell(Math.floor(x / SIDEWALK_SPACING), Math.floor(z / SIDEWALK_SPACING));
+        this.cellCounts.set(k, (this.cellCounts.get(k) || 0) + 1);
+      }
+      finalizeAlerts() {
+        this.alerts.length = 0;
+        for (const z of ALL_ZONE_IDS) if (this.zoneCounts[z] > this.zoneLimits[z]) this.alerts.push(z);
+      }
+      getCellCountAt(x, z) {
+        return this.cellCounts.get(this.hashCell(Math.floor(x / SIDEWALK_SPACING), Math.floor(z / SIDEWALK_SPACING))) || 0;
+      }
+      canAcceptNpcAt(x, z) {
+        const zone = this.getZoneAt(x, z);
+        if (this.zoneCounts[zone] >= this.zoneLimits[zone]) return false;
+        return this.getCellCountAt(x, z) < CELL_MAX_BUDGET;
+      }
+    }
+
+    const LOD_FULL_SQ = LOD_FULL_DIST * LOD_FULL_DIST;
+    const LOD_MID_SQ = LOD_MID_DIST * LOD_MID_DIST;
+    const LOD_LOW_SQ = LOD_LOW_DIST * LOD_LOW_DIST;
+    class LODSystem {
+      constructor() { this.counts = { full: 0, mid: 0, low: 0 }; }
+      beginFrame() { this.counts.full = 0; this.counts.mid = 0; this.counts.low = 0; }
+      classify(distSq) {
+        if (distSq <= LOD_FULL_SQ) { this.counts.full++; return 'full'; }
+        if (distSq <= LOD_MID_SQ) { this.counts.mid++; return 'mid'; }
+        if (distSq <= LOD_LOW_SQ) { this.counts.low++; return 'low'; }
+        return null;
+      }
+    }
+
+    // =========================================================================
+    // IA INDIVIDUAL DO PEDESTRE (PedestrianAI)
+    // =========================================================================
+    class PedestrianAI {
+      constructor(index) {
+        this.index = index;
+        this.active = true;
+        this.inSimRange = false;
+        this.visuallyActive = false;
+        this.ragdollActive = false;
+        this.injuryStatus = 'healthy';
+        this.injuredByPlayer = false;
+        this.injuredTimer = 0;
+        this.fadingInjuredOut = false;
+        this.health = 90;
+        this.maxHealth = 90;
+        this.insideBuilding = null;
+        this.fadeAlpha = 1.0;
+        this.fadingOut = false;
+        this.routineLabel = 'Passeio';
+        this.targetHourLabel = '18:00';
+        this.activeDirective = null;
+        this.x = 0; this.y = 0; this.z = 0; this.yaw = 0;
+        this.heightScale = 1; this.widthScale = 1;
+        this.state = 'WALK';
+        this.stateTimer = 2;
+        this.animPhase = (index * 1.37) % (Math.PI * 2);
+        this.currentNodeId = 0; this.targetNodeId = 0;
+        this.pendingEdge = null;
+        this.fleeDirX = 0; this.fleeDirZ = 1;
+        this.dodgeVx = 0; this.dodgeVz = 0;
+        this.courtesyTimer = 0; this.courtesyOffsetX = 0; this.courtesyOffsetZ = 0;
+        this.sepX = 0; this.sepZ = 0;
+        this.nearbyPeerCount = 0;
+        const rainSlot = index % 10;
+        this.hasUmbrella = rainSlot >= 4 && rainSlot < 8;
+        this.umbrellaOpen = false;
+        this.weatherSpeedScale = 1.0;
+        this.waitingBusStopIdx = -1;
+        this.boardedBusId = null;
+        this.busDisembarkCooldown = 0;
+        this.commuteTargetPlace = null;
+        this.isRushBusCommute = false;
+        this.targetBusStopIdx = -1;
+        this.shelterDirective = { routineLabel: '', targetHourLabel: '', targetPlace: null, shouldBeInside: false, wanderAround: false };
+      }
+      initCitizen(profile, h, w, colors) {
+        this.profile = profile;
+        this.personality = profile.personality;
+        this.archetype =
+          profile.profession === 'volleyball' ? 'volleyball' :
+          profile.profession === 'runner' ? 'runner' :
+          profile.profession === 'skater' ? 'skater' :
+          (profile.profession === 'executive' || profile.profession === 'guard') ? 'executive' : 'tourist';
+        this.maxHealth = profile.maxHealth;
+        this.health = profile.maxHealth;
+        this.skinColor = colors.skin; this.hairColor = colors.hair;
+        this.shirtColor = colors.shirt; this.pantsColor = colors.pants;
+        this.heightScale = h; this.widthScale = w;
+      }
+      triggerFastInjuredFade() {
+        if (this.injuryStatus === 'healthy') return;
+        this.fadingInjuredOut = true;
+      }
+      resetToHealthy() {
+        this.health = this.maxHealth;
+        this.injuryStatus = 'healthy';
+        this.injuredByPlayer = false;
+        this.injuredTimer = 0;
+        this.fadingInjuredOut = false;
+        this.ragdollActive = false;
+        this.fadeAlpha = 1.0;
+        this.fadingOut = false;
+        this.state = this.archetype === 'runner' ? 'JOG' : 'WALK';
+        this.stateTimer = 2 + Math.random() * 2.5;
+      }
+      spawnAt(node) {
+        this.inSimRange = true;
+        this.visuallyActive = true;
+        this.ragdollActive = false;
+        this.resetToHealthy();
+        this.insideBuilding = null;
+        this.x = node.x + (Math.random() - 0.5) * 1.4;
+        this.z = node.z + (Math.random() - 0.5) * 1.4;
+        this.y = 0;
+        this.yaw = Math.random() * Math.PI * 2;
+        this.currentNodeId = node.id;
+        this.targetNodeId = node.id;
+      }
+      triggerCourtesySidestep(otherX, otherZ) {
+        if (this.courtesyTimer > 0 || this.state === 'FLEE' || this.state === 'DODGE') return;
+        const fwdX = Math.sin(this.yaw), fwdZ = Math.cos(this.yaw);
+        const rightX = Math.cos(this.yaw), rightZ = -Math.sin(this.yaw);
+        const side = (otherX - this.x) * rightX + (otherZ - this.z) * rightZ > 0 ? -1 : 1;
+        this.courtesyOffsetX = (rightX * side - fwdX * 0.12) * 2.2;
+        this.courtesyOffsetZ = (rightZ * side - fwdZ * 0.12) * 2.2;
+        this.courtesyTimer = 0.85;
+      }
+      syncToSchedule(gameTime, isWeekend, graph, schedule, zoneDensity) {
+        if (this.injuryStatus === 'out' || this.ragdollActive || this.state === 'ON_BUS') return;
+        const snap = schedule.computeRemoteSpawnPosition(this.profile, gameTime, isWeekend, graph, this.index);
+        this.routineLabel = snap.directive.routineLabel;
+        this.targetHourLabel = snap.directive.targetHourLabel;
+        this.activeDirective = snap.directive;
+        if (this.insideBuilding && (!snap.inside || this.insideBuilding !== snap.directive.targetPlace)) {
+          this.insideBuilding.insideCount = Math.max(0, this.insideBuilding.insideCount - 1);
+          this.insideBuilding = null;
+        }
+        if (snap.inside) {
+          if (this.insideBuilding !== snap.directive.targetPlace) {
+            this.insideBuilding = snap.directive.targetPlace;
+            this.insideBuilding.insideCount++;
+          }
+          this.x = this.insideBuilding.entryX; this.z = this.insideBuilding.entryZ;
+          this.fadeAlpha = 0; this.fadingOut = false; this.state = 'INSIDE_BUILDING';
+          this.waitingBusStopIdx = -1;
+          return;
+        }
+        this.x = snap.x; this.z = snap.z; this.fadeAlpha = 1.0; this.fadingOut = false;
+        this.waitingBusStopIdx = -1; this.boardedBusId = null;
+        const near = graph.findClosestNode(this.x, this.z);
+        this.currentNodeId = near.id; this.targetNodeId = near.id;
+        this.pickNextWaypoint(graph, zoneDensity);
+        this.state = this.injuryStatus === 'injured' ? 'LIMP' : this.archetype === 'runner' ? 'JOG' : 'WALK';
+        this.stateTimer = 2 + Math.random() * 3;
+      }
+      triggerFlee(tx, tz) {
+        if (!this.active || this.ragdollActive || this.injuryStatus === 'out' || this.insideBuilding || this.state === 'ON_BUS') return;
+        this.waitingBusStopIdx = -1;
+        const dx = this.x - tx, dz = this.z - tz, len = Math.hypot(dx, dz) || 1;
+        this.fleeDirX = dx / len; this.fleeDirZ = dz / len;
+        this.state = 'FLEE'; this.stateTimer = 4.5 + Math.random() * 2.5; this.pendingEdge = null;
+      }
+      triggerDodge(carX, carZ, carVx, carVz) {
+        if (!this.active || this.ragdollActive || this.insideBuilding || this.state === 'ON_BUS' || this.state === 'FLEE' || this.state === 'DODGE') return;
+        this.waitingBusStopIdx = -1;
+        const dx = this.x - carX, dz = this.z - carZ;
+        const side = dx * carVz - dz * carVx >= 0 ? 1 : -1;
+        const len = Math.hypot(carVx, carVz) || 1;
+        this.dodgeVx = (-carVz / len) * side * 6.5;
+        this.dodgeVz = (carVx / len) * side * 6.5;
+        this.state = 'DODGE'; this.stateTimer = 0.65;
+      }
+      findNearestStopIdx(x, z, maxDist) {
+        let best = -1, bestD2 = maxDist * maxDist;
+        for (let i = 0; i < WORLD_POIS.busStops.length; i++) {
+          const bs = WORLD_POIS.busStops[i];
+          const d2 = (bs.waitX - x) ** 2 + (bs.waitZ - z) ** 2;
+          if (d2 < bestD2) { bestD2 = d2; best = i; }
+        }
+        return best;
+      }
+      stepDecision(dt, graph, schedule, registry, ctx, zoneDensity) {
+        if (!this.active || this.ragdollActive || this.injuryStatus === 'out') return;
+        if (this.busDisembarkCooldown > 0) this.busDisembarkCooldown = Math.max(0, this.busDisembarkCooldown - dt);
+        if (this.state === 'ON_BUS') { this.routineLabel = 'No Ônibus'; return; }
+
+        const baseDir = schedule.evaluate(this.profile, ctx.gameTime, ctx.isWeekend, this.index);
+        this.commuteTargetPlace = baseDir.targetPlace;
+        let dir = baseDir;
+        const w = ctx.weather;
+
+        const isRushHour = !ctx.isWeekend && ((ctx.gameTime >= 8.0 && ctx.gameTime < 9.15) || (ctx.gameTime >= 17.0 && ctx.gameTime < 19.0));
+        this.isRushBusCommute = false;
+        this.targetBusStopIdx = -1;
+        if (isRushHour && this.busDisembarkCooldown <= 0 && this.injuryStatus === 'healthy' && !baseDir.shouldBeInside && this.state !== 'FLEE' && this.archetype !== 'runner') {
+          const distGoal = Math.hypot(baseDir.targetPlace.entryX - this.x, baseDir.targetPlace.entryZ - this.z);
+          if (distGoal > 46) {
+            let bOrig = -1, bOrigD2 = Infinity, bDest = -1, bDestD2 = Infinity;
+            for (let i = 0; i < WORLD_POIS.busStops.length; i++) {
+              const bs = WORLD_POIS.busStops[i];
+              const dO = (bs.waitX - this.x) ** 2 + (bs.waitZ - this.z) ** 2;
+              if (dO < bOrigD2) { bOrigD2 = dO; bOrig = i; }
+              const dD = (bs.waitX - baseDir.targetPlace.entryX) ** 2 + (bs.waitZ - baseDir.targetPlace.entryZ) ** 2;
+              if (dD < bDestD2) { bDestD2 = dD; bDest = i; }
+            }
+            if (bOrig !== -1 && bOrig !== bDest && bOrigD2 < 52 * 52) {
+              this.isRushBusCommute = true;
+              this.targetBusStopIdx = bOrig;
+            }
+          }
+        }
+
+        if (w === 'rain') {
+          const rainGroup = this.index % 10;
+          const seeksIndoorShop = rainGroup < 4 && this.injuryStatus === 'healthy';
+          const usesUmbrella = this.hasUmbrella && this.injuryStatus === 'healthy';
+          this.umbrellaOpen = usesUmbrella && !this.insideBuilding && this.state !== 'FLEE';
+          if (seeksIndoorShop) {
+            const shelter = registry.findNearestShelter(this.x, this.z, true);
+            if (shelter) {
+              this.shelterDirective.routineLabel = 'Abrigo em Loja (Chuva)';
+              this.shelterDirective.targetHourLabel = baseDir.targetHourLabel;
+              this.shelterDirective.targetPlace = shelter;
+              this.shelterDirective.shouldBeInside = shelter.hasInterior;
+              this.shelterDirective.wanderAround = false;
+              dir = this.shelterDirective;
+            }
+            this.weatherSpeedScale = 1.38;
+          } else if (usesUmbrella) {
+            this.weatherSpeedScale = 1.08;
+          } else {
+            this.weatherSpeedScale = 1.42;
+          }
+        } else if (w === 'fog') {
+          this.umbrellaOpen = false;
+          this.weatherSpeedScale = 0.84;
+        } else if (w === 'heat') {
+          const sunUmbrella = (this.index % 4) === 0 && !this.insideBuilding && !ctx.isNight && this.state !== 'FLEE';
+          this.umbrellaOpen = sunUmbrella;
+          if (!sunUmbrella && !ctx.isNight && this.index % 3 === 0) {
+            const shade = registry.findNearestShelter(this.x, this.z, false);
+            if (shade) {
+              this.shelterDirective.routineLabel = 'Procurando Sombra (Calor)';
+              this.shelterDirective.targetHourLabel = baseDir.targetHourLabel;
+              this.shelterDirective.targetPlace = shade;
+              this.shelterDirective.shouldBeInside = shade.hasInterior;
+              this.shelterDirective.wanderAround = !shade.hasInterior;
+              dir = this.shelterDirective;
+            }
+          }
+          this.weatherSpeedScale = 0.86;
+        } else {
+          this.umbrellaOpen = false;
+          this.weatherSpeedScale = 1.0;
+        }
+
+        this.activeDirective = dir;
+        this.routineLabel = this.state === 'FLEE' ? 'Fugindo!' : this.state === 'BUS_WAIT' ? 'Esperando Ônibus' : this.isRushBusCommute ? 'Indo à Parada (Pico)' : this.injuryStatus === 'injured' ? 'Ferido (Mancando)' : w === 'rain' && this.umbrellaOpen ? 'Sob Guarda-Chuva' : w === 'heat' && this.umbrellaOpen ? 'Sombrinha no Calor' : dir.routineLabel;
+        this.targetHourLabel = dir.targetHourLabel;
+
+        if (this.insideBuilding) {
+          if (!dir.shouldBeInside || dir.targetPlace !== this.insideBuilding) {
+            const door = this.insideBuilding;
+            door.insideCount = Math.max(0, door.insideCount - 1);
+            this.insideBuilding = null;
+            this.x = door.entryX + (Math.random() - 0.5) * 0.8;
+            this.z = door.entryZ + (Math.random() - 0.5) * 0.8;
+            this.fadeAlpha = 0.05; this.fadingOut = false;
+            this.state = this.injuryStatus === 'injured' ? 'LIMP' : 'WALK';
+          }
+          return;
+        }
+
+        if (this.isRushBusCommute && this.targetBusStopIdx >= 0) {
+          const stop = WORLD_POIS.busStops[this.targetBusStopIdx];
+          if (Math.hypot(stop.waitX - this.x, stop.waitZ - this.z) < 3.4) {
+            this.state = 'BUS_WAIT';
+            this.waitingBusStopIdx = this.targetBusStopIdx;
+            this.yaw = stop.yaw;
+            this.stateTimer = 14.0;
+            return;
+          }
+        } else if (this.state !== 'BUS_WAIT') {
+          this.waitingBusStopIdx = -1;
+        }
+
+        if (dir.shouldBeInside && dir.targetPlace.hasInterior && this.state !== 'FLEE' && this.injuryStatus !== 'injured') {
+          if (Math.hypot(dir.targetPlace.entryX - this.x, dir.targetPlace.entryZ - this.z) < 2.6) {
+            this.fadingOut = true;
+            this.insideBuilding = dir.targetPlace;
+            dir.targetPlace.insideCount++;
+            this.umbrellaOpen = false;
+            this.waitingBusStopIdx = -1;
+            return;
+          }
+        }
+        for (const car of ctx.fastVehicles) {
+          if ((this.x - car.x) ** 2 + (this.z - car.z) ** 2 < 46 && this.state !== 'DODGE' && this.state !== 'FLEE') {
+            this.triggerDodge(car.x, car.z, car.vx, car.vz);
+            return;
+          }
+        }
+        if (this.state === 'WAIT_CROSSWALK' && this.pendingEdge) {
+          if (graph.canCrossEdge(this.pendingEdge)) {
+            this.targetNodeId = this.pendingEdge.to; this.pendingEdge = null;
+            this.state = this.injuryStatus === 'injured' ? 'LIMP' : this.archetype === 'runner' ? 'JOG' : 'WALK';
+          }
+          return;
+        }
+        this.stateTimer -= dt;
+        if (this.stateTimer <= 0) {
+          if (this.state === 'FLEE' || this.state === 'DODGE') {
+            this.currentNodeId = graph.findClosestNode(this.x, this.z).id;
+            this.pickNextWaypoint(graph, zoneDensity);
+            this.state = this.injuryStatus === 'injured' ? 'LIMP' : this.archetype === 'runner' ? 'JOG' : 'WALK';
+            this.stateTimer = 3.5 + Math.random() * 3.5;
+            return;
+          }
+          if (this.injuryStatus === 'injured') {
+            this.pickNextWaypoint(graph, zoneDensity); this.state = 'LIMP'; this.stateTimer = 4; return;
+          }
+          const node = graph.nodes[this.currentNodeId], r = Math.random();
+          if (node && node.poiKind === 'bench' && r < 0.6 && w !== 'rain') { this.state = 'SIT'; this.yaw = node.poiYaw; this.stateTimer = 5; return; }
+          if (node && node.poiKind === 'bus_stop' && r < 0.65) { this.state = 'BUS_WAIT'; this.waitingBusStopIdx = this.findNearestStopIdx(node.x, node.z, 6.0); this.yaw = node.poiYaw; this.stateTimer = 6 + Math.random() * 6; return; }
+          this.waitingBusStopIdx = -1;
+          if (node && node.poiKind === 'volleyball' && (this.archetype === 'volleyball' || r < 0.5) && w !== 'rain') { this.state = 'VOLLEY'; this.stateTimer = 6; return; }
+          if (node && node.poiKind === 'night_bar' && ctx.isNight && r < 0.6 && w !== 'rain') { this.state = 'DANCE'; this.stateTimer = 6; return; }
+          if (r < 0.25 && this.archetype !== 'runner' && this.archetype !== 'skater' && w !== 'rain') {
+            this.state = Math.random() < 0.5 ? 'PHONE' : 'SELFIE'; this.stateTimer = 3.5; return;
+          }
+          this.pickNextWaypoint(graph, zoneDensity);
+          if (this.state !== 'WAIT_CROSSWALK') {
+            this.state = this.archetype === 'runner' ? 'JOG' : 'WALK';
+            this.stateTimer = 3 + Math.random() * 4;
+          }
+        }
+      }
+      pickNextWaypoint(graph, zoneDensity) {
+        const cur = graph.nodes[this.currentNodeId];
+        if (!cur || !cur.edges.length) return;
+        const pool = cur.edges.filter((e) => e.to !== this.targetNodeId);
+        const list = pool.length ? pool : cur.edges;
+        let chosen = list[Math.floor(Math.random() * list.length)];
+        let gx = null, gz = null;
+        if (this.isRushBusCommute && this.targetBusStopIdx >= 0) {
+          const st = WORLD_POIS.busStops[this.targetBusStopIdx];
+          gx = st.waitX; gz = st.waitZ;
+        } else if (this.activeDirective && !this.activeDirective.wanderAround && Math.random() < 0.85) {
+          gx = this.activeDirective.targetPlace.entryX; gz = this.activeDirective.targetPlace.entryZ;
+        }
+        let best = Infinity;
+        for (const e of list) {
+          const n = graph.nodes[e.to];
+          let score = gx !== null && gz !== null ? Math.hypot(n.x - gx, n.z - gz) : Math.random() * 22;
+          if (zoneDensity) {
+            if (!zoneDensity.canAcceptNpcAt(n.x, n.z)) score += 55;
+            else score += zoneDensity.getCellCountAt(n.x, n.z) * 18;
+          }
+          if (score < best) { best = score; chosen = e; }
+        }
+        if (chosen.isCrosswalk && !graph.canCrossEdge(chosen)) {
+          this.pendingEdge = chosen; this.state = 'WAIT_CROSSWALK'; this.stateTimer = 7; return;
+        }
+        this.pendingEdge = null; this.targetNodeId = chosen.to;
+      }
+      stepMotion(dt, graph, registry, zoneDensity) {
+        if (!this.active || this.ragdollActive || this.injuryStatus === 'out') return;
+        if (this.injuryStatus === 'injured') {
+          this.injuredTimer += dt;
+          if (this.fadingInjuredOut) {
+            this.fadeAlpha = Math.max(0, this.fadeAlpha - dt * 1.25);
+            if (this.fadeAlpha <= 0) { this.resetToHealthy(); this.visuallyActive = false; return; }
+          } else if (this.injuredTimer >= 14.0) {
+            this.resetToHealthy();
+          }
+        }
+        if (this.fadingOut) {
+          this.fadeAlpha = Math.max(0, this.fadeAlpha - dt * 2.4);
+          if (this.fadeAlpha <= 0) { this.fadingOut = false; this.state = 'INSIDE_BUILDING'; }
+          return;
+        }
+        if (this.insideBuilding) return;
+        if (this.fadeAlpha < 1 && !this.fadingInjuredOut) this.fadeAlpha = Math.min(1, this.fadeAlpha + dt * 2.4);
+        if (this.courtesyTimer > 0) this.courtesyTimer = Math.max(0, this.courtesyTimer - dt);
+
+        if (this.state === 'DODGE') {
+          this.x += this.dodgeVx * dt; this.z += this.dodgeVz * dt;
+          this.dodgeVx *= Math.exp(-4.5 * dt); this.dodgeVz *= Math.exp(-4.5 * dt);
+          this.y = groundHeightAt(this.x, this.z); return;
+        }
+        if (this.state === 'FLEE') {
+          const spd = this.injuryStatus === 'injured' ? 3.5 : 6.5;
+          const mx = this.fleeDirX * spd + this.sepX * 0.5, mz = this.fleeDirZ * spd + this.sepZ * 0.5;
+          this.x = Math.max(-124, Math.min(71, this.x + mx * dt));
+          this.z = Math.max(-124, Math.min(124, this.z + mz * dt));
+          this.yaw = Math.atan2(mx, mz); this.animPhase += dt * 14;
+          this.y = groundHeightAt(this.x, this.z); return;
+        }
+        if (this.state === 'WALK' || this.state === 'JOG' || this.state === 'LIMP') {
+          const t = graph.nodes[this.targetNodeId];
+          if (t) {
+            const dx = t.x - this.x, dz = t.z - this.z, dist = Math.hypot(dx, dz);
+            if (dist < 1.25) { this.currentNodeId = t.id; this.pickNextWaypoint(graph, zoneDensity); }
+            else {
+              const spd = (this.state === 'LIMP' ? 1.15 : this.state === 'JOG' ? 4.6 : this.archetype === 'skater' ? 4.9 : 2.1) * this.weatherSpeedScale;
+              const cx = this.courtesyTimer > 0 ? this.courtesyOffsetX : 0;
+              const cz = this.courtesyTimer > 0 ? this.courtesyOffsetZ : 0;
+              const sx = (dx / dist) * spd + this.sepX * 0.9 + cx, sz = (dz / dist) * spd + this.sepZ * 0.9 + cz;
+              this.x += sx * dt; this.z += sz * dt;
+              const ty = Math.atan2(sx, sz);
+              let diff = ty - this.yaw;
+              while (diff > Math.PI) diff -= Math.PI * 2; while (diff < -Math.PI) diff += Math.PI * 2;
+              this.yaw += diff * Math.min(1, dt * 8);
+              this.animPhase += dt * (this.state === 'LIMP' ? 5.2 : this.state === 'JOG' ? 13 : 7.5) * this.weatherSpeedScale;
+            }
+          }
+        } else {
+          this.animPhase += dt * 5;
+        }
+        for (const obs of registry.staticObstacles) {
+          const dx = this.x - obs.x, dz = this.z - obs.z, minD = obs.radius + 0.42, d2 = dx * dx + dz * dz;
+          if (d2 < minD * minD && d2 > 0.0001) {
+            const d = Math.sqrt(d2); this.x += (dx / d) * (minD - d); this.z += (dz / d) * (minD - d);
+          }
+        }
+        this.y = groundHeightAt(this.x, this.z);
+      }
+      computePose(out, lod = 'full') {
+        out.headPitch = 0; out.leftArmX = 0; out.leftArmZ = 0.06; out.rightArmX = 0; out.rightArmZ = -0.06;
+        out.leftLegX = 0; out.rightLegX = 0; out.hipDropY = 0; out.jumpY = 0; out.torsoLeanX = 0;
+        if (lod === 'low') {
+          if (this.umbrellaOpen && this.state !== 'FLEE' && this.state !== 'DODGE' && this.state !== 'VOLLEY') out.rightArmX = -1.25;
+          return;
+        }
+        const s = Math.sin(this.animPhase), c = Math.cos(this.animPhase);
+        if (lod === 'mid') {
+          if (this.state === 'WALK' || this.state === 'JOG' || this.state === 'FLEE' || this.state === 'LIMP') {
+            const amp = this.state === 'JOG' || this.state === 'FLEE' ? 0.72 : 0.48;
+            out.leftLegX = s * amp; out.rightLegX = -s * amp; out.leftArmX = -s * amp * 0.75; out.rightArmX = s * amp * 0.75;
+          } else if (this.state === 'SIT') { out.hipDropY = -0.34; out.leftLegX = -1.45; out.rightLegX = -1.45; }
+          if (this.umbrellaOpen && this.state !== 'FLEE' && this.state !== 'DODGE' && this.state !== 'VOLLEY') { out.rightArmX = -1.25; out.rightArmZ = -0.06; }
+          return;
+        }
+        if (this.state === 'LIMP') {
+          const limp = Math.max(0, s);
+          out.leftLegX = s * 0.35; out.rightLegX = -limp * 0.65; out.rightArmX = -0.45;
+          out.hipDropY = -limp * 0.14; out.torsoLeanX = 0.22;
+        } else if (this.state === 'WALK') {
+          out.leftLegX = s * 0.52; out.rightLegX = -s * 0.52; out.leftArmX = -s * 0.42; out.rightArmX = s * 0.42; out.jumpY = Math.abs(c) * 0.04;
+        } else if (this.state === 'JOG') {
+          out.leftLegX = s * 0.85; out.rightLegX = -s * 0.85; out.leftArmX = -s * 0.9 - 0.35; out.rightArmX = s * 0.9 - 0.35; out.torsoLeanX = 0.18; out.jumpY = Math.abs(c) * 0.09;
+        } else if (this.state === 'FLEE') {
+          out.leftLegX = s * 0.95; out.rightLegX = -s * 0.95; out.leftArmX = -2.4 + s * 0.35; out.rightArmX = -2.4 - s * 0.35; out.torsoLeanX = 0.22;
+        } else if (this.state === 'SIT') {
+          out.hipDropY = -0.34; out.leftLegX = -1.45; out.rightLegX = -1.45;
+        } else if (this.state === 'PHONE') { out.headPitch = 0.42; out.rightArmX = -1.05; }
+        else if (this.state === 'SELFIE') { out.rightArmX = -2.05; }
+        else if (this.state === 'DANCE') { out.leftArmX = -1.4 + s * 0.65; out.rightArmX = -1.4 - s * 0.65; out.jumpY = Math.abs(s) * 0.14; }
+        else if (this.state === 'VOLLEY') { const j = Math.max(0, s); out.jumpY = j * 0.52; out.leftArmX = -2.2 + j * 0.5; out.rightArmX = -2.2 + j * 0.5; }
+        if (this.umbrellaOpen && this.state !== 'FLEE' && this.state !== 'DODGE' && this.state !== 'VOLLEY') {
+          out.rightArmX = -1.25; out.rightArmZ = -0.06;
+        }
+      }
+    }
+
+    // =========================================================================
+    // CLASSE 3: RagdollPool (Pool de 30 ragdolls 1,75m + VFX cartoon sem gore)
+    // =========================================================================
+    const RAGDOLL_POOL_SIZE = MAX_SIMULATED_INJURED;
+    class RagdollPool {
+      constructor(sceneRef) {
+        this.slots = [];
+        this.dust = [];
+        this.inUseCount = 0;
+        const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.65 });
+        const makeMesh = (geo) => {
+          const m = new THREE.InstancedMesh(geo, mat, RAGDOLL_POOL_SIZE);
+          m.frustumCulled = false; m.castShadow = true;
+          m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(RAGDOLL_POOL_SIZE * 3), 3);
+          sceneRef.add(m);
+          return m;
+        };
+        this.torsoMesh = makeMesh(new THREE.BoxGeometry(0.38, 0.58, 0.22));
+        this.headMesh = makeMesh(new THREE.BoxGeometry(0.26, 0.26, 0.26));
+        this.lArmMesh = makeMesh(new THREE.BoxGeometry(0.12, 0.56, 0.13));
+        this.rArmMesh = makeMesh(new THREE.BoxGeometry(0.12, 0.56, 0.13));
+        this.lLegMesh = makeMesh(new THREE.BoxGeometry(0.15, 0.78, 0.17));
+        this.rLegMesh = makeMesh(new THREE.BoxGeometry(0.15, 0.78, 0.17));
+        this.allMeshes = [this.torsoMesh, this.headMesh, this.lArmMesh, this.rArmMesh, this.lLegMesh, this.rLegMesh];
+
+        this.dustMesh = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.36, 0), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }), 36);
+        this.dustMesh.frustumCulled = false;
+        this.dustMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(36 * 3), 3);
+        sceneRef.add(this.dustMesh);
+
+        this.starMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.14, 0), new THREE.MeshBasicMaterial({ color: 0xfacc15 }), RAGDOLL_POOL_SIZE * 3);
+        this.starMesh.frustumCulled = false;
+        sceneRef.add(this.starMesh);
+
+        this._mat = new THREE.Matrix4(); this._matL = new THREE.Matrix4();
+        this._pos = new THREE.Vector3(); this._quat = new THREE.Quaternion();
+        this._euler = new THREE.Euler(); this._scale = new THREE.Vector3(); this._col = new THREE.Color();
+
+        for (let i = 0; i < RAGDOLL_POOL_SIZE; i++) {
+          this.slots.push({ active: false, npcIndex: -1, outcome: 'out', beingRescued: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, ry: 0, rz: 0, avx: 0, avy: 0, avz: 0, age: 0, maxLifetime: 10, fadeStart: 8.4, h: 1, w: 1, flail: 0, groundT: 0 });
+          this.hideSlot(i);
+        }
+        for (let i = 0; i < 36; i++) {
+          this.dust.push({ active: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, age: 0, life: 0.5, flash: false });
+          this._mat.makeScale(0, 0, 0); this.dustMesh.setMatrixAt(i, this._mat);
+        }
+      }
+      hideSlot(i) {
+        this._mat.makeScale(0, 0, 0);
+        this.allMeshes.forEach((m) => m.setMatrixAt(i, this._mat));
+        for (let s = 0; s < 3; s++) this.starMesh.setMatrixAt(i * 3 + s, this._mat);
+      }
+      rescueSlot(slotIdx) {
+        const r = this.slots[slotIdx];
+        if (!r || !r.active) return;
+        r.active = false; r.beingRescued = false;
+        this.hideSlot(slotIdx);
+        this.allMeshes.forEach((m) => { m.instanceMatrix.needsUpdate = true; });
+        this.starMesh.instanceMatrix.needsUpdate = true;
+      }
+      accelerateOldestFade() {
+        let oldestIdx = -1;
+        for (let i = 0; i < this.slots.length; i++) {
+          const s = this.slots[i];
+          if (!s.active || s.beingRescued) continue;
+          if (oldestIdx === -1 || s.age > this.slots[oldestIdx].age) oldestIdx = i;
+        }
+        if (oldestIdx !== -1) {
+          const r = this.slots[oldestIdx];
+          r.fadeStart = Math.min(r.fadeStart, r.age);
+          r.maxLifetime = Math.min(r.maxLifetime, r.age + 0.8);
+        }
+      }
+      spawn(p, onRecycledNpc) {
+        let idx = this.slots.findIndex((s) => !s.active);
+        if (idx === -1) {
+          idx = 0;
+          for (let i = 1; i < this.slots.length; i++) if (this.slots[i].age > this.slots[idx].age) idx = i;
+          if (this.slots[idx].npcIndex >= 0 && onRecycledNpc) onRecycledNpc(this.slots[idx].npcIndex);
+        }
+        const r = this.slots[idx];
+        r.active = true; r.npcIndex = p.npcIndex; r.outcome = p.outcome; r.beingRescued = false;
+        r.x = p.x; r.y = p.y + 0.92; r.z = p.z;
+        r.vx = p.vx; r.vy = p.vy; r.vz = p.vz;
+        r.rx = (Math.random() - 0.5) * 0.6; r.ry = p.yaw; r.rz = (Math.random() - 0.5) * 0.6;
+        r.avx = (Math.random() - 0.5) * 11; r.avy = (Math.random() - 0.5) * 8; r.avz = (Math.random() - 0.5) * 11;
+        r.age = 0; r.groundT = 0; r.h = p.h; r.w = p.w; r.flail = Math.random() * 6;
+        r.maxLifetime = p.outcome === 'injured_recover' ? 2.4 : p.outcome === 'unconscious' ? 11.5 : 14.0;
+        r.fadeStart = p.outcome === 'injured_recover' ? 2.4 : p.outcome === 'unconscious' ? 10.6 : 13.0;
+
+        this.headMesh.setColorAt(idx, this._col.setHex(p.skin));
+        this.torsoMesh.setColorAt(idx, this._col.setHex(p.shirt));
+        this.lArmMesh.setColorAt(idx, this._col.setHex(p.shirt));
+        this.rArmMesh.setColorAt(idx, this._col.setHex(p.shirt));
+        this.lLegMesh.setColorAt(idx, this._col.setHex(p.pants));
+        this.rLegMesh.setColorAt(idx, this._col.setHex(p.pants));
+        this.allMeshes.forEach((m) => { if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+
+        this.allocDust(p.x, p.y + 0.95, p.z, 0, 0.5, 0, 0.16, true);
+        for (let k = 0; k < 4; k++) {
+          const a = (k * Math.PI) / 2 + Math.random() * 0.5;
+          this.allocDust(p.x, p.y + 0.85, p.z, Math.cos(a) * 3.5, 2.0, Math.sin(a) * 3.5, 0.6, false);
+        }
+      }
+      allocDust(x, y, z, vx, vy, vz, life, flash) {
+        let idx = this.dust.findIndex((d) => !d.active); if (idx === -1) idx = 0;
+        const d = this.dust[idx];
+        d.active = true; d.x = x; d.y = y; d.z = z; d.vx = vx; d.vy = vy; d.vz = vz; d.age = 0; d.life = life; d.flash = flash;
+        this.dustMesh.setColorAt(idx, this._col.setHex(flash ? 0xffffff : 0xf1f5f9));
+        if (this.dustMesh.instanceColor) this.dustMesh.instanceColor.needsUpdate = true;
+      }
+      update(dt, blds, onRecover, onExpire, onHitNpc) {
+        let count = 0;
+        for (let i = 0; i < RAGDOLL_POOL_SIZE; i++) {
+          const r = this.slots[i];
+          if (!r.active) continue;
+          r.age += dt;
+          if (r.beingRescued) {
+            r.age = Math.min(r.age, Math.max(0.5, r.fadeStart - 0.8));
+          } else if (r.age >= r.maxLifetime) {
+            r.active = false; this.hideSlot(i);
+            if (r.outcome === 'out') onExpire(r.npcIndex);
+            else onRecover(r.npcIndex, r.x, r.z);
+            continue;
+          }
+          count++;
+          r.vy -= 22 * dt; r.x += r.vx * dt; r.y += r.vy * dt; r.z += r.vz * dt;
+          r.rx += r.avx * dt; r.ry += r.avy * dt; r.rz += r.avz * dt;
+          const fy = groundHeightAt(r.x, r.z) + 0.24;
+          if (r.y <= fy) {
+            r.y = fy;
+            if (Math.abs(r.vy) > 2.2) r.vy = -r.vy * 0.36;
+            else { r.vy = 0; r.groundT += dt; r.rx += (Math.PI / 2 - r.rx) * Math.min(1, dt * 8); r.rz *= Math.exp(-8 * dt); }
+            r.vx *= Math.exp(-5.5 * dt); r.vz *= Math.exp(-5.5 * dt);
+            r.avx *= Math.exp(-6.5 * dt); r.avy *= Math.exp(-6.5 * dt); r.avz *= Math.exp(-6.5 * dt);
+          }
+          for (const b of blds) {
+            const minX = b.x - b.halfW - 0.5, maxX = b.x + b.halfW + 0.5, minZ = b.z - b.halfD - 0.5, maxZ = b.z + b.halfD + 0.5;
+            if (r.x > minX && r.x < maxX && r.z > minZ && r.z < maxZ) {
+              const dL = r.x - minX, dR = maxX - r.x, dT = r.z - minZ, dB = maxZ - r.z, m = Math.min(dL, dR, dT, dB);
+              if (m === dL) { r.x = minX; r.vx = -Math.abs(r.vx) * 0.5; }
+              else if (m === dR) { r.x = maxX; r.vx = Math.abs(r.vx) * 0.5; }
+              else if (m === dT) { r.z = minZ; r.vz = -Math.abs(r.vz) * 0.5; }
+              else { r.z = maxZ; r.vz = Math.abs(r.vz) * 0.5; }
+            }
+          }
+          if (r.vx * r.vx + r.vz * r.vz > 24) onHitNpc(r);
+          r.flail += dt * (r.vy > 0.5 ? 12 : 3);
+          const fade = r.age > r.fadeStart ? Math.max(0.01, 1 - (r.age - r.fadeStart) / Math.max(0.05, r.maxLifetime - r.fadeStart)) : 1;
+
+          this._euler.set(r.rx, r.ry, r.rz, 'YXZ'); this._quat.setFromEuler(this._euler);
+          this._pos.set(r.x, r.y, r.z); this._scale.set(r.w * fade, r.h * fade, r.w * fade);
+          this._mat.compose(this._pos, this._quat, this._scale);
+          this.torsoMesh.setMatrixAt(i, this._mat);
+
+          const fl = Math.sin(r.flail) * 0.55;
+          this._scale.set(1, 1, 1);
+          const setPart = (mesh, px, py, ex, ez) => {
+            this._euler.set(ex, 0, ez); this._quat.setFromEuler(this._euler);
+            this._pos.set(px, py, 0); this._matL.compose(this._pos, this._quat, this._scale).premultiply(this._mat);
+            mesh.setMatrixAt(i, this._matL);
+          };
+          setPart(this.headMesh, 0, 0.44, fl * 0.3, 0);
+          setPart(this.lArmMesh, -0.26, 0.2, -1.2 + fl, 0.5);
+          setPart(this.rArmMesh, 0.26, 0.2, -1.2 - fl, -0.5);
+          setPart(this.lLegMesh, -0.1, -0.52, fl * 0.7, 0.12);
+          setPart(this.rLegMesh, 0.1, -0.52, -fl * 0.7, -0.12);
+
+          if (r.groundT > 0.1 && r.outcome !== 'out' && fade > 0.3) {
+            for (let s = 0; s < 3; s++) {
+              const ang = r.age * 4.5 + (s * Math.PI * 2) / 3;
+              this._pos.set(r.x + Math.cos(ang) * 0.42, r.y + 0.82, r.z + Math.sin(ang) * 0.42);
+              this._euler.set(0, ang, 0); this._quat.setFromEuler(this._euler); this._scale.setScalar(0.85 * fade);
+              this._matL.compose(this._pos, this._quat, this._scale); this.starMesh.setMatrixAt(i * 3 + s, this._matL);
+            }
+          } else {
+            this._matL.makeScale(0, 0, 0);
+            for (let s = 0; s < 3; s++) this.starMesh.setMatrixAt(i * 3 + s, this._matL);
+          }
+        }
+        this.inUseCount = count;
+        this.allMeshes.forEach((m) => { m.instanceMatrix.needsUpdate = true; });
+        for (let i = 0; i < 36; i++) {
+          const d = this.dust[i]; if (!d.active) continue;
+          d.age += dt;
+          if (d.age >= d.life) { d.active = false; this._mat.makeScale(0, 0, 0); this.dustMesh.setMatrixAt(i, this._mat); continue; }
+          d.x += d.vx * dt; d.y += d.vy * dt; d.z += d.vz * dt;
+          const t = d.age / d.life, sc = d.flash ? 2.4 * (1 - t) : (0.5 + t * 1.4) * (1 - t);
+          this._pos.set(d.x, d.y, d.z); this._quat.identity(); this._scale.setScalar(Math.max(0.01, sc));
+          this._mat.compose(this._pos, this._quat, this._scale); this.dustMesh.setMatrixAt(i, this._mat);
+        }
+        this.dustMesh.instanceMatrix.needsUpdate = true;
+        this.starMesh.instanceMatrix.needsUpdate = true;
+      }
+    }
+
+    // =========================================================================
+    // CLASSE 4: CrowdManager (600 pool / 150-250 visíveis, Frustum, 1,75m, LOD)
+    // =========================================================================
+    const MAX_NPCS = MAX_NPC_POOL;
+    const CELL_SIZE = 10;
+    const AI_BUDGET_PER_FRAME = 72;
+    const BG_SIM_BUDGET_PER_FRAME = 24;
+    const SIM_RADIUS_SQ = SIM_MAX_RADIUS * SIM_MAX_RADIUS;
+    const DESPAWN_OUT_FRUSTUM_SQ = DESPAWN_OUT_FRUSTUM_DIST * DESPAWN_OUT_FRUSTUM_DIST;
+    const SPAWN_MIN_SQ = SPAWN_MIN_DIST * SPAWN_MIN_DIST;
+    const SKIN_PAL = [0xf5cbb0, 0xe0ac84, 0xc6865c, 0x8d5524, 0xf2d2bd];
+    const HAIR_PAL = [0x14111f, 0x3b2416, 0x7c4a26, 0xd4a348, 0xc93b5b];
+    const SHIRT_PAL = [0xff477e, 0x16f2d4, 0xfacc15, 0xff8c38, 0x38bdf8, 0x1e293b, 0x10b981];
+    const PANTS_PAL = [0x0f172a, 0x1e293b, 0x3b82f6, 0x3f3f46];
+    const UMB_PAL = [0xff2e93, 0x00e5ff, 0xfacc15, 0x22f59a, 0xff7b29, 0xa855f7, 0xf43f5e];
+
+    class CrowdManager {
+      constructor(sceneRef, registry, schedule, initTime) {
+        this.graph = new NavGraph();
+        this.registry = registry;
+        this.schedule = schedule;
+        this.zoneDensity = new ZoneDensityManager();
+        this.lodSystem = new LODSystem();
+        this.agents = [];
+        this.spatialGrid = new Map();
+        this.aiCursor = 0;
+        this.bgCursor = 0;
+        this.spawnCursor = 0;
+        this.testCursor = 0;
+        this.maxVisibleNpcs = MAX_NPC_VISIBLE;
+        this.activeCount = 0;
+        this.backgroundCount = 0;
+        this.insideCount = 0;
+        this.activeInjuredCount = 0;
+        this.colliderBuffer = [];
+
+        this._matW = new THREE.Matrix4(); this._matL = new THREE.Matrix4();
+        this._pos = new THREE.Vector3(); this._quat = new THREE.Quaternion();
+        this._euler = new THREE.Euler(); this._scale = new THREE.Vector3();
+        this._col = new THREE.Color(); this._proj = new THREE.Vector3();
+        this._frustum = new THREE.Frustum(); this._projScreen = new THREE.Matrix4();
+        this._camFwd = new THREE.Vector3(); this._sphere = new THREE.Sphere(new THREE.Vector3(), 1.35);
+        this._pose = { headPitch: 0, leftArmX: 0, leftArmZ: 0, rightArmX: 0, rightArmZ: 0, leftLegX: 0, rightLegX: 0, hipDropY: 0, jumpY: 0, torsoLeanX: 0 };
+
+        const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.68 });
+        // Proporções humanas realistas (~1,75 m de altura média, silhueta mais esguia)
+        const headGeo = new THREE.BoxGeometry(0.26, 0.26, 0.26); headGeo.translate(0, 0.15, 0);
+        const hairGeo = new THREE.BoxGeometry(0.28, 0.12, 0.28); hairGeo.translate(0, 0.31, -0.01);
+        const torsoGeo = new THREE.BoxGeometry(0.38, 0.58, 0.22); torsoGeo.translate(0, 0.29, 0);
+        const armGeo = new THREE.BoxGeometry(0.12, 0.56, 0.13); armGeo.translate(0, -0.26, 0);
+        const legGeo = new THREE.BoxGeometry(0.15, 0.78, 0.17); legGeo.translate(0, -0.39, 0);
+        const boardGeo = new THREE.BoxGeometry(0.28, 0.06, 0.92); boardGeo.translate(0, 0.04, 0);
+        const umbShaftGeo = new THREE.CylinderGeometry(0.016, 0.016, 0.64, 5); umbShaftGeo.translate(0, 0.32, 0);
+        const umbCanopyGeo = new THREE.ConeGeometry(0.48, 0.22, 8); umbCanopyGeo.translate(0, 0.64, 0);
+
+        const mk = (g) => {
+          const m = new THREE.InstancedMesh(g, mat, MAX_NPCS);
+          m.frustumCulled = false; m.castShadow = true;
+          m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_NPCS * 3), 3);
+          sceneRef.add(m); return m;
+        };
+        this.headM = mk(headGeo); this.hairM = mk(hairGeo); this.torsoM = mk(torsoGeo);
+        this.lArmM = mk(armGeo); this.rArmM = mk(armGeo);
+        this.lLegM = mk(legGeo); this.rLegM = mk(legGeo); this.boardM = mk(boardGeo);
+        this.umbShaftM = mk(umbShaftGeo); this.umbCanopyM = mk(umbCanopyGeo);
+        this.allMeshes = [this.headM, this.hairM, this.torsoM, this.lArmM, this.rArmM, this.lLegM, this.rLegM, this.boardM, this.umbShaftM, this.umbCanopyM];
+
+        this.zoneDensity.updateLimits(initTime, false, 'clear', this.maxVisibleNpcs);
+        this.zoneDensity.beginFrame();
+        let initialVisible = 0;
+
+        for (let i = 0; i < MAX_NPCS; i++) {
+          const a = new PedestrianAI(i);
+          const prof = schedule.createProfile(i + 1, registry);
+          const skin = SKIN_PAL[i % SKIN_PAL.length];
+          const hair = HAIR_PAL[(i * 3) % HAIR_PAL.length];
+          const shirt = SHIRT_PAL[(i * 7) % SHIRT_PAL.length];
+          const pants = PANTS_PAL[(i * 11) % PANTS_PAL.length];
+          const hScale = 1.0 - NPC_HEIGHT_VARIATION + (((i * 37) % 100) / 99) * (NPC_HEIGHT_VARIATION * 2);
+          const wScale = 0.86 + ((i * 53) % 13) * 0.01;
+          a.initCitizen(prof, hScale, wScale, { skin, hair, shirt, pants });
+          a.syncToSchedule(initTime, false, this.graph, schedule, this.zoneDensity);
+          if (!a.insideBuilding && initialVisible < this.maxVisibleNpcs && this.zoneDensity.canAcceptNpcAt(a.x, a.z)) {
+            a.visuallyActive = true; a.inSimRange = true;
+            this.zoneDensity.recordVisibleNpc(a.x, a.z);
+            initialVisible++;
+          } else {
+            a.visuallyActive = false; a.inSimRange = false;
+            if (a.insideBuilding) { a.insideBuilding.insideCount = Math.max(0, a.insideBuilding.insideCount - 1); a.insideBuilding = null; }
+            this.hide(i);
+          }
+          this.agents.push(a);
+          this.colliderBuffer.push({ active: false, inside: false, x: 0, y: 0, z: 0 });
+          this.headM.setColorAt(i, this._col.setHex(skin));
+          this.hairM.setColorAt(i, this._col.setHex(hair));
+          this.torsoM.setColorAt(i, this._col.setHex(shirt));
+          this.lArmM.setColorAt(i, this._col.setHex(a.archetype === 'tourist' ? skin : shirt));
+          this.rArmM.setColorAt(i, this._col.setHex(a.archetype === 'tourist' ? skin : shirt));
+          this.lLegM.setColorAt(i, this._col.setHex(pants));
+          this.rLegM.setColorAt(i, this._col.setHex(pants));
+          this.boardM.setColorAt(i, this._col.setHex(0xff2e93));
+          this.umbShaftM.setColorAt(i, this._col.setHex(0x1e293b));
+          this.umbCanopyM.setColorAt(i, this._col.setHex(UMB_PAL[(i * 5) % UMB_PAL.length]));
+        }
+        this.allMeshes.forEach((m) => { if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+      }
+      setQualityPreset(preset) { this.maxVisibleNpcs = QUALITY_SETTINGS[preset].maxVisibleNpcs; }
+      hide(i) {
+        this._matW.makeScale(0, 0, 0);
+        this.allMeshes.forEach((m) => m.setMatrixAt(i, this._matW));
+      }
+      demoteToBackground(a) {
+        a.visuallyActive = false; a.inSimRange = false;
+        if (a.insideBuilding) { a.insideBuilding.insideCount = Math.max(0, a.insideBuilding.insideCount - 1); a.insideBuilding = null; }
+        if (a.injuryStatus === 'out' && !a.ragdollActive) a.resetToHealthy();
+        this.hide(a.index);
+      }
+      findNextPooledAgent() {
+        for (let s = 0; s < MAX_NPCS; s++) {
+          const a = this.agents[(this.aiCursor + s) % MAX_NPCS];
+          if (!a.active || a.visuallyActive || a.ragdollActive || a.state === 'ON_BUS') continue;
+          if (a.injuryStatus !== 'healthy') a.resetToHealthy();
+          return a;
+        }
+        return null;
+      }
+      enforceInjuredCap(cap = MAX_SIMULATED_INJURED) {
+        let count = 0;
+        for (const a of this.agents) {
+          if (!a.active) continue;
+          if (a.injuryStatus !== 'healthy' || a.ragdollActive) {
+            count++;
+            if (count > cap && !a.ragdollActive) a.triggerFastInjuredFade();
+          }
+        }
+      }
+      hashCell(cx, cz) { return ((cx + 64) << 8) | (cz + 64); }
+      queryRadiusIndices(x, z, r, out) {
+        out.length = 0;
+        const minCx = Math.floor((x - r) / CELL_SIZE), maxCx = Math.floor((x + r) / CELL_SIZE);
+        const minCz = Math.floor((z - r) / CELL_SIZE), maxCz = Math.floor((z + r) / CELL_SIZE);
+        const r2 = r * r;
+        for (let cx = minCx; cx <= maxCx; cx++) {
+          for (let cz = minCz; cz <= maxCz; cz++) {
+            const b = this.spatialGrid.get(this.hashCell(cx, cz));
+            if (!b) continue;
+            for (let k = 0; k < b.length; k++) {
+              const idx = b[k], a = this.agents[idx];
+              if ((a.x - x) ** 2 + (a.z - z) ** 2 <= r2) out.push(idx);
+            }
+          }
+        }
+        return out;
+      }
+      spawnTestGroupInFront(px, pz, yaw, count = 10) {
+        const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+        let done = 0;
+        for (let step = 0; step < MAX_NPCS && done < count; step++) {
+          const idx = (this.testCursor + step) % MAX_NPCS;
+          const a = this.agents[idx];
+          if (a.ragdollActive) continue;
+          if (a.insideBuilding) { a.insideBuilding.insideCount = Math.max(0, a.insideBuilding.insideCount - 1); a.insideBuilding = null; }
+          const row = Math.floor(done / 5), col = (done % 5) - 2;
+          a.x = Math.max(-122, Math.min(70, px + fx * (9.5 + row * 2.5) + rx * (col * 1.9)));
+          a.z = Math.max(-122, Math.min(122, pz + fz * (9.5 + row * 2.5) + rz * (col * 1.9)));
+          a.y = groundHeightAt(a.x, a.z);
+          a.yaw = yaw + Math.PI;
+          a.active = true; a.inSimRange = true; a.visuallyActive = true; a.ragdollActive = false;
+          a.resetToHealthy(); a.state = 'WALK'; a.routineLabel = 'Grupo de Teste (K)';
+          const n = this.graph.findClosestNode(a.x, a.z);
+          a.currentNodeId = n.id; a.targetNodeId = n.edges[0]?.to ?? n.id;
+          done++;
+        }
+        this.testCursor = (this.testCursor + count) % MAX_NPCS;
+      }
+      update(dt, ctx, cam) {
+        this.graph.updateTrafficSignals(dt);
+        cam.updateMatrixWorld();
+        this._projScreen.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+        this._frustum.setFromProjectionMatrix(this._projScreen);
+        cam.getWorldDirection(this._camFwd);
+        const camFwdLen = Math.hypot(this._camFwd.x, this._camFwd.z) || 1;
+        const camFwdX = this._camFwd.x / camFwdLen, camFwdZ = this._camFwd.z / camFwdLen;
+
+        this.zoneDensity.updateLimits(ctx.gameTime, ctx.isWeekend, ctx.weather, this.maxVisibleNpcs);
+        this.zoneDensity.beginFrame();
+        this.lodSystem.beginFrame();
+
+        let visibleCount = 0, backgroundCount = 0, injuredNow = 0;
+        for (let i = 0; i < MAX_NPCS; i++) {
+          const a = this.agents[i];
+          if (!a.active) continue;
+          if (a.injuryStatus !== 'healthy' || a.ragdollActive) injuredNow++;
+          if (a.state === 'ON_BUS' || a.ragdollActive) { this.hide(i); continue; }
+          const dx = a.x - ctx.playerX, dz = a.z - ctx.playerZ, distSq = dx * dx + dz * dz;
+          if (a.visuallyActive) {
+            if (distSq > SIM_RADIUS_SQ) { this.demoteToBackground(a); backgroundCount++; continue; }
+            this._sphere.center.set(a.x, a.y + 0.9, a.z);
+            const inFrustum = this._frustum.intersectsSphere(this._sphere);
+            if ((!inFrustum && distSq > DESPAWN_OUT_FRUSTUM_SQ) || visibleCount >= this.maxVisibleNpcs) {
+              if (!inFrustum || distSq > DESPAWN_OUT_FRUSTUM_SQ) { this.demoteToBackground(a); backgroundCount++; continue; }
+            }
+            if (!a.insideBuilding) this.zoneDensity.recordVisibleNpc(a.x, a.z);
+            visibleCount++;
+          } else {
+            backgroundCount++;
+          }
+        }
+
+        let bgStepped = 0;
+        for (let step = 0; step < MAX_NPCS && bgStepped < BG_SIM_BUDGET_PER_FRAME; step++) {
+          const a = this.agents[(this.bgCursor + step) % MAX_NPCS];
+          if (!a.active || a.visuallyActive || a.ragdollActive || a.state === 'ON_BUS') continue;
+          if (a.injuryStatus === 'out') a.resetToHealthy();
+          const dir = this.schedule.evaluate(a.profile, ctx.gameTime, ctx.isWeekend, a.index);
+          if (dir.shouldBeInside) { a.x = dir.targetPlace.entryX; a.z = dir.targetPlace.entryZ; }
+          else { const n = this.graph.findClosestNode(dir.targetPlace.entryX, dir.targetPlace.entryZ); a.x = n.x; a.z = n.z; }
+          bgStepped++;
+        }
+        this.bgCursor = (this.bgCursor + BG_SIM_BUDGET_PER_FRAME) % MAX_NPCS;
+
+        const spawnBudget = Math.min(10, Math.max(0, this.maxVisibleNpcs - visibleCount));
+        let spawned = 0;
+        const nodeCount = this.graph.nodes.length;
+        for (let attempt = 0; attempt < 48 && spawned < spawnBudget; attempt++) {
+          const cNode = this.graph.nodes[(this.spawnCursor + attempt * 7) % nodeCount];
+          if (!cNode) continue;
+          const dx = cNode.x - ctx.playerX, dz = cNode.z - ctx.playerZ, distSq = dx * dx + dz * dz;
+          if (distSq > SIM_RADIUS_SQ - 100 || distSq < 22 * 22) continue;
+          const dist = Math.sqrt(distSq);
+          const forwardDot = (dx / dist) * camFwdX + (dz / dist) * camFwdZ;
+          if (forwardDot >= -0.1 && distSq < SPAWN_MIN_SQ) continue;
+          if (!this.zoneDensity.canAcceptNpcAt(cNode.x, cNode.z)) continue;
+          const pooled = this.findNextPooledAgent();
+          if (!pooled) break;
+          pooled.spawnAt(cNode);
+          pooled.pickNextWaypoint(this.graph, this.zoneDensity);
+          this.zoneDensity.recordVisibleNpc(pooled.x, pooled.z);
+          visibleCount++; backgroundCount = Math.max(0, backgroundCount - 1); spawned++;
+        }
+        this.spawnCursor = (this.spawnCursor + 11) % nodeCount;
+
+        this.activeInjuredCount = injuredNow;
+        if (injuredNow > MAX_SIMULATED_INJURED) this.enforceInjuredCap(MAX_SIMULATED_INJURED);
+
+        for (const b of this.spatialGrid.values()) b.length = 0;
+        for (const a of this.agents) {
+          if (!a.visuallyActive || a.insideBuilding || a.ragdollActive || a.injuryStatus === 'out' || a.state === 'ON_BUS') continue;
+          const k = this.hashCell(Math.floor(a.x / CELL_SIZE), Math.floor(a.z / CELL_SIZE));
+          let b = this.spatialGrid.get(k); if (!b) { b = []; this.spatialGrid.set(k, b); }
+          b.push(a.index);
+        }
+
+        const aiScale = Math.max(1, visibleCount / AI_BUDGET_PER_FRAME);
+        let used = 0;
+        for (let s = 0; s < MAX_NPCS && used < AI_BUDGET_PER_FRAME; s++) {
+          const a = this.agents[(this.aiCursor + s) % MAX_NPCS];
+          if (!a.visuallyActive || a.ragdollActive || a.injuryStatus === 'out' || a.state === 'ON_BUS') continue;
+          a.sepX = 0; a.sepZ = 0; a.nearbyPeerCount = 0;
+          if (!a.insideBuilding) {
+            const cx = Math.floor(a.x / CELL_SIZE), cz = Math.floor(a.z / CELL_SIZE);
+            const myFx = Math.sin(a.yaw), myFz = Math.cos(a.yaw);
+            for (let ox = -1; ox <= 1; ox++) for (let oz = -1; oz <= 1; oz++) {
+              const b = this.spatialGrid.get(this.hashCell(cx + ox, cz + oz)); if (!b) continue;
+              for (let k = 0; k < b.length; k++) {
+                const o = this.agents[b[k]]; if (o === a) continue;
+                const dx = a.x - o.x, dz = a.z - o.z, d2 = dx * dx + dz * dz;
+                if (d2 < 9.0) {
+                  a.nearbyPeerCount++;
+                  if (d2 < 1.85 && d2 > 0.0001) { const d = Math.sqrt(d2), p = (1.36 - d) * 2.55; a.sepX += (dx / d) * p; a.sepZ += (dz / d) * p; }
+                  if (d2 < 7.84 && d2 > 1.2 && a.courtesyTimer <= 0 && (myFx * Math.sin(o.yaw) + myFz * Math.cos(o.yaw)) < -0.35) {
+                    a.triggerCourtesySidestep(o.x, o.z);
+                  }
+                }
+              }
+            }
+          }
+          a.stepDecision(dt * aiScale, this.graph, this.schedule, this.registry, ctx, this.zoneDensity);
+          used++;
+        }
+        this.aiCursor = (this.aiCursor + AI_BUDGET_PER_FRAME) % MAX_NPCS;
+
+        let renderedOutside = 0;
+        for (let i = 0; i < MAX_NPCS; i++) {
+          const a = this.agents[i], dbg = this.colliderBuffer[i];
+          if (!a.visuallyActive || a.ragdollActive || a.injuryStatus === 'out' || a.state === 'ON_BUS') { this.hide(i); dbg.active = false; dbg.inside = false; continue; }
+          a.stepMotion(dt, this.graph, this.registry, this.zoneDensity);
+          if (!a.visuallyActive || (a.insideBuilding && !a.fadingOut) || a.fadeAlpha <= 0.01) { this.hide(i); dbg.active = false; dbg.inside = Boolean(a.insideBuilding); continue; }
+          const distSq = (a.x - ctx.playerX) ** 2 + (a.z - ctx.playerZ) ** 2;
+          const lod = this.lodSystem.classify(distSq) || 'low';
+          renderedOutside++;
+          a.computePose(this._pose, lod);
+
+          const h = a.heightScale * a.fadeAlpha, w = a.widthScale * a.fadeAlpha;
+          this._euler.set(0, a.yaw, 0, 'YXZ'); this._quat.setFromEuler(this._euler);
+          this._pos.set(a.x, a.y + this._pose.jumpY + this._pose.hipDropY + (a.archetype === 'skater' ? 0.09 : 0), a.z);
+          this._scale.set(w, h, w); this._matW.compose(this._pos, this._quat, this._scale);
+          this._scale.set(1, 1, 1);
+          const put = (mesh, px, py, ex, ez = 0) => {
+            this._euler.set(ex, 0, ez, 'XYZ'); this._quat.setFromEuler(this._euler);
+            this._pos.set(px, py, 0); this._matL.compose(this._pos, this._quat, this._scale).premultiply(this._matW);
+            mesh.setMatrixAt(i, this._matL);
+          };
+          put(this.lLegM, -0.095, 0.78, this._pose.leftLegX);
+          put(this.rLegM, 0.095, 0.78, this._pose.rightLegX);
+          put(this.torsoM, 0, 0.78, this._pose.torsoLeanX);
+          put(this.headM, 0, 1.36, this._pose.headPitch + this._pose.torsoLeanX * 0.5);
+          put(this.hairM, 0, 1.36, this._pose.headPitch + this._pose.torsoLeanX * 0.5);
+          put(this.lArmM, -0.255, 1.31, this._pose.leftArmX, this._pose.leftArmZ);
+          put(this.rArmM, 0.255, 1.31, this._pose.rightArmX, this._pose.rightArmZ);
+          if (a.umbrellaOpen && a.state !== 'FLEE' && a.state !== 'DODGE' && a.state !== 'VOLLEY') {
+            this._euler.set(0.16, 0, -0.05, 'XYZ'); this._quat.setFromEuler(this._euler);
+            this._pos.set(0.255, 1.24, 0.44); this._matL.compose(this._pos, this._quat, this._scale).premultiply(this._matW);
+            this.umbShaftM.setMatrixAt(i, this._matL); this.umbCanopyM.setMatrixAt(i, this._matL);
+          } else {
+            this._matL.makeScale(0, 0, 0); this.umbShaftM.setMatrixAt(i, this._matL); this.umbCanopyM.setMatrixAt(i, this._matL);
+          }
+          if (a.archetype === 'skater') {
+            this._euler.set(0, a.yaw, 0); this._quat.setFromEuler(this._euler);
+            this._pos.set(a.x, a.y + 0.02, a.z); this._scale.setScalar(a.fadeAlpha);
+            this._matL.compose(this._pos, this._quat, this._scale); this.boardM.setMatrixAt(i, this._matL);
+          } else { this._matL.makeScale(0, 0, 0); this.boardM.setMatrixAt(i, this._matL); }
+          dbg.active = true; dbg.inside = false; dbg.x = a.x; dbg.y = a.y; dbg.z = a.z;
+        }
+        this.zoneDensity.finalizeAlerts();
+        this.activeCount = renderedOutside;
+        this.backgroundCount = backgroundCount;
+        this.insideCount = this.registry.getTotalInsideCount();
+        this.allMeshes.forEach((m) => { m.instanceMatrix.needsUpdate = true; });
+      }
+      drawRoutineLabels(ctx, cam, w, h, px, pz) {
+        ctx.clearRect(0, 0, w, h);
+        ctx.font = '600 11px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+        let drawn = 0;
+        for (const a of this.agents) {
+          if (!a.visuallyActive || a.insideBuilding || a.ragdollActive || a.injuryStatus === 'out' || a.state === 'ON_BUS') continue;
+          if ((a.x - px) ** 2 + (a.z - pz) ** 2 > 1444) continue;
+          this._proj.set(a.x, a.y + 2.15 * a.heightScale, a.z).project(cam);
+          if (this._proj.z < -1 || this._proj.z > 1) continue;
+          const sx = (this._proj.x * 0.5 + 0.5) * w, sy = (-this._proj.y * 0.5 + 0.5) * h;
+          const txt = `${a.routineLabel} · ${a.targetHourLabel}`;
+          const tw = Math.max(88, ctx.measureText(txt).width + 14);
+          ctx.fillStyle = 'rgba(14,10,28,0.85)'; ctx.fillRect(sx - tw / 2, sy - 16, tw, 24);
+          ctx.strokeStyle = a.injuryStatus === 'injured' ? '#facc15' : '#38bdf8'; ctx.strokeRect(sx - tw / 2, sy - 16, tw, 24);
+          ctx.fillStyle = '#f8fafc'; ctx.fillText(txt, sx, sy - 6);
+          const hp = Math.max(0, a.health / a.maxHealth);
+          ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(sx - (tw - 12) / 2, sy + 2, tw - 12, 3);
+          ctx.fillStyle = hp > 0.6 ? '#22c55e' : hp > 0.3 ? '#facc15' : '#ef4444';
+          ctx.fillRect(sx - (tw - 12) / 2, sy + 2, (tw - 12) * hp, 3);
+          if (++drawn >= 28) break;
+        }
+      }
+    }
+
+    // =========================================================================
+    // CLASSE 5: ImpactSystem (Apenas impactos reais do jogador, teto 30 feridos)
+    // =========================================================================
+    class ImpactSystem {
+      constructor() {
+        this.injuredTotalCount = 0;
+        this.recentStreak = 0;
+        this.streakTimer = 0;
+        this.footBuf = []; this.carBuf = []; this.witBuf = []; this.dominoBuf = [];
+      }
+      update(dt, vehicleList, playerCar, pPos, crowd, ragdolls) {
+        const res = { hitStop: 0, shake: 0, wanted: 0, msg: null, sfx: false, strength: 0 };
+        if (this.streakTimer > 0) { this.streakTimer -= dt; if (this.streakTimer <= 0) this.recentStreak = 0; }
+        if (!playerCar) {
+          const near = crowd.queryRadiusIndices(pPos.x, pPos.z, 2.0, this.footBuf);
+          for (const idx of near) {
+            const npc = crowd.agents[idx];
+            if (!npc.visuallyActive || npc.insideBuilding || npc.ragdollActive || npc.injuryStatus === 'out') continue;
+            const dx = npc.x - pPos.x, dz = npc.z - pPos.z, d2 = dx * dx + dz * dz;
+            if (d2 < 0.85 && d2 > 0.0001) { const d = Math.sqrt(d2); npc.x += (dx / d) * (0.92 - d) * 1.4; npc.z += (dz / d) * (0.92 - d) * 1.4; }
+          }
+        }
+        for (const car of vehicleList) {
+          const absSpd = Math.abs(car.speed); if (absSpd < 2.2) continue;
+          const isPlayer = car === playerCar;
+          const sinH = Math.sin(car.heading), cosH = Math.cos(car.heading);
+          const cands = crowd.queryRadiusIndices(car.x, car.z, isPlayer ? car.halfLength + 1.4 : car.halfLength + 4.4, this.carBuf);
+          for (const idx of cands) {
+            const npc = crowd.agents[idx];
+            if (!npc.visuallyActive || npc.insideBuilding || npc.ragdollActive || npc.injuryStatus === 'out' || npc.state === 'ON_BUS') continue;
+            const dx = npc.x - car.x, dz = npc.z - car.z;
+            const lZ = dx * sinH + dz * cosH, lX = dx * cosH - dz * sinH;
+            if (!isPlayer) {
+              if (Math.abs(lX) <= car.halfWidth + 0.95 && lZ > -0.8 && lZ < car.halfLength + 4.2) {
+                npc.triggerDodge(car.x, car.z, sinH * car.speed, cosH * car.speed);
+                car.speed *= 0.84;
+              }
+              continue;
+            }
+            if (absSpd < 3.5) {
+              if (Math.abs(lX) <= car.halfWidth + 0.55 && Math.abs(lZ) <= car.halfLength + 0.55) {
+                npc.triggerDodge(car.x, car.z, sinH * car.speed, cosH * car.speed);
+              }
+              continue;
+            }
+            if (Math.abs(lX) <= car.halfWidth + 0.42 && Math.abs(lZ) <= car.halfLength + 0.42) {
+              if (crowd.activeInjuredCount >= MAX_SIMULATED_INJURED) {
+                ragdolls.accelerateOldestFade();
+                crowd.enforceInjuredCap(MAX_SIMULATED_INJURED - 1);
+              }
+              if (npc.injuryStatus === 'healthy') this.injuredTotalCount++;
+              const dmg = absSpd * (car.type === 'bus' ? 5.0 : car.type === 'ambulance' ? 4.2 : car.type === 'police' ? 4.1 : car.type === 'sports' ? 3.8 : 3.4);
+              npc.health = Math.max(0, npc.health - dmg); npc.ragdollActive = true; npc.injuredByPlayer = true; npc.injuredTimer = 0;
+              const outcome = npc.health <= 0 ? 'out' : npc.health <= 28 ? 'unconscious' : 'injured_recover';
+              npc.injuryStatus = outcome === 'out' ? 'out' : outcome === 'unconscious' ? 'unconscious' : 'injured';
+              const sgn = car.speed >= 0 ? 1 : -1, jit = (Math.random() - 0.5) * 4.5;
+              ragdolls.spawn({
+                npcIndex: npc.index, x: npc.x, y: npc.y, z: npc.z, yaw: npc.yaw,
+                vx: sinH * absSpd * sgn * 0.85 + cosH * jit, vy: Math.min(11.5, 2.6 + absSpd * 0.34), vz: cosH * absSpd * sgn * 0.85 - sinH * jit,
+                outcome, h: npc.heightScale, w: npc.widthScale, skin: npc.skinColor, shirt: npc.shirtColor, pants: npc.pantsColor,
+              }, (oldIdx) => crowd.agents[oldIdx]?.resetToHealthy());
+              car.health = Math.max(20, car.health - Math.min(26, absSpd * 0.85));
+              car.damageRatio = 1 - car.health / 100;
+              car.speed *= 0.84;
+              if (car.bodyMesh) { car.bodyMesh.rotation.z = car.damageRatio * 0.06; car.bodyMesh.rotation.x = car.damageRatio * 0.04; }
+              const wits = crowd.queryRadiusIndices(npc.x, npc.z, 20, this.witBuf);
+              let reported = false;
+              for (const wIdx of wits) {
+                const w = crowd.agents[wIdx];
+                if (w.index === npc.index || w.ragdollActive || w.insideBuilding) continue;
+                w.triggerFlee(car.x, car.z);
+                if (!reported && (w.personality === 'fearful' || w.personality === 'curious')) reported = true;
+              }
+              this.recentStreak++; this.streakTimer = 10;
+              res.hitStop = absSpd > 9 ? 0.05 : 0.03; res.shake = Math.min(0.65, 0.16 + absSpd * 0.02);
+              res.sfx = true; res.strength = Math.min(1, absSpd / 28);
+              res.wanted = this.recentStreak >= 4 ? 3 : (this.recentStreak >= 2 || reported) ? 2 : 1;
+              res.msg = this.recentStreak >= 4 ? 'Múltiplos atropelamentos! Procurado nível 3!' : reported ? 'Testemunha acionou a polícia!' : 'Atropelamento!';
+            }
+          }
+        }
+        return res;
+      }
+      handleRagdollHitsNpc(ragdoll, crowd, ragdolls) {
+        if (crowd.activeInjuredCount >= MAX_SIMULATED_INJURED) return;
+        const cands = crowd.queryRadiusIndices(ragdoll.x, ragdoll.z, 1.35, this.dominoBuf);
+        for (const idx of cands) {
+          const npc = crowd.agents[idx];
+          if (npc.index === ragdoll.npcIndex || npc.insideBuilding || npc.ragdollActive || npc.injuryStatus === 'out') continue;
+          if ((npc.x - ragdoll.x) ** 2 + (npc.z - ragdoll.z) ** 2 < 0.9) {
+            if (npc.injuryStatus === 'healthy') this.injuredTotalCount++;
+            npc.ragdollActive = true; npc.health = Math.max(15, npc.health - 18); npc.injuryStatus = 'injured'; npc.injuredByPlayer = true; npc.injuredTimer = 0;
+            ragdolls.spawn({
+              npcIndex: npc.index, x: npc.x, y: npc.y, z: npc.z, yaw: npc.yaw,
+              vx: ragdoll.vx * 0.55, vy: 2.8, vz: ragdoll.vz * 0.55, outcome: 'injured_recover',
+              h: npc.heightScale, w: npc.widthScale, skin: npc.skinColor, shirt: npc.shirtColor, pants: npc.pantsColor,
+            }, (oldIdx) => crowd.agents[oldIdx]?.resetToHealthy());
+            break;
+          }
+        }
+      }
+    }
+
+    // =========================================================================
+    // JOGADOR, VEÍCULOS E INSTANCIAÇÃO DOS SISTEMAS
+    // =========================================================================
+    const playerRig = new THREE.Group();
+    const jacketMat = new THREE.MeshStandardMaterial({ color: 0xff3b7f, roughness: 0.45 });
+    const leftLeg = new THREE.Group(); leftLeg.position.set(-0.15, 0.78, 0);
+    const lM = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.76, 0.24), new THREE.MeshStandardMaterial({ color: 0x1e223d })); lM.position.y = -0.38; leftLeg.add(lM);
+    const rightLeg = new THREE.Group(); rightLeg.position.set(0.15, 0.78, 0);
+    const rM = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.76, 0.24), new THREE.MeshStandardMaterial({ color: 0x1e223d })); rM.position.y = -0.38; rightLeg.add(rM);
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.68, 0.32), jacketMat); torso.position.y = 1.12; torso.castShadow = true;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.36), new THREE.MeshStandardMaterial({ color: 0xd99b72 })); head.position.y = 1.66; head.castShadow = true;
+    playerRig.add(leftLeg, rightLeg, torso, head); scene.add(playerRig);
+
+    const vehicles = [];
+    function createCar(name, type, color, x, z, heading, driver = 'npc', axis = 'z', dir = 1) {
+      const grp = new THREE.Group();
+      const isPolice = type === 'police', isSports = type === 'sports', isBus = type === 'bus', isAmb = type === 'ambulance';
+      let body = null, redBar = null, blueBar = null, wheels = [];
+
+      if (isBus) {
+        body = new THREE.Mesh(new THREE.BoxGeometry(2.42, 2.15, 8.2), new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.35, metalness: 0.25 }));
+        body.position.y = 1.52; body.castShadow = true; grp.add(body);
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.46, 0.28, 8.24), new THREE.MeshStandardMaterial({ color: 0x06b6d4, emissive: 0x0891b2, emissiveIntensity: 0.5 }));
+        stripe.position.y = 1.05; grp.add(stripe);
+        const win = new THREE.Mesh(new THREE.BoxGeometry(2.45, 0.72, 7.6), new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.15 }));
+        win.position.set(0, 1.88, 0.05); grp.add(win);
+        const led = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.24, 0.1), new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xfacc15, emissiveIntensity: 1.6 }));
+        led.position.set(0, 2.38, 4.11); grp.add(led);
+        const wGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.32, 12); wGeo.rotateZ(Math.PI / 2);
+        const wMat = new THREE.MeshStandardMaterial({ color: 0x141418 });
+        [[-1.16, 2.55], [1.16, 2.55], [-1.16, -2.55], [1.16, -2.55]].forEach(([wx, wz]) => {
+          const w = new THREE.Mesh(wGeo, wMat); w.position.set(wx, 0.45, wz); grp.add(w); wheels.push(w);
+        });
+      } else if (isAmb) {
+        body = new THREE.Mesh(new THREE.BoxGeometry(2.05, 1.38, 4.95), new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3, metalness: 0.2 }));
+        body.position.y = 1.1; body.castShadow = true; grp.add(body);
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.08, 0.26, 4.98), new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xdc2626, emissiveIntensity: 0.45 }));
+        stripe.position.y = 0.92; grp.add(stripe);
+        const crossMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+        const ch = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.16, 0.52), crossMat); ch.position.set(0, 1.38, -0.5);
+        const cv = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.52, 0.16), crossMat); cv.position.set(0, 1.38, -0.5);
+        grp.add(ch, cv);
+        redBar = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.16, 0.24), new THREE.MeshStandardMaterial({ color: 0xff2244, emissive: 0xff1133, emissiveIntensity: 0.4 }));
+        redBar.position.set(-0.32, 1.88, 0.95);
+        blueBar = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.16, 0.24), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xe2e8f0, emissiveIntensity: 0.4 }));
+        blueBar.position.set(0.32, 1.88, 0.95);
+        grp.add(redBar, blueBar);
+        const wGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.28, 12); wGeo.rotateZ(Math.PI / 2);
+        const wMat = new THREE.MeshStandardMaterial({ color: 0x141418 });
+        [[-0.98, 1.55], [0.98, 1.55], [-0.98, -1.55], [0.98, -1.55]].forEach(([wx, wz]) => {
+          const w = new THREE.Mesh(wGeo, wMat); w.position.set(wx, 0.38, wz); grp.add(w); wheels.push(w);
+        });
+      } else {
+        body = new THREE.Mesh(new THREE.BoxGeometry(1.92, isSports ? 0.62 : 0.72, 4.2), new THREE.MeshStandardMaterial({ color: isPolice ? 0x161926 : color, roughness: 0.3, metalness: 0.55 }));
+        body.position.y = 0.72; body.castShadow = true; grp.add(body);
+        const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.5, 2.0), new THREE.MeshStandardMaterial({ color: isPolice ? 0xf8fafc : 0x16253b, roughness: 0.2 }));
+        cabin.position.set(0, 1.25, -0.15); grp.add(cabin);
+        if (isPolice) {
+          redBar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.22), new THREE.MeshStandardMaterial({ color: 0xff2244, emissive: 0xff1133, emissiveIntensity: 2 })); redBar.position.set(-0.28, 1.56, -0.1);
+          blueBar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.22), new THREE.MeshStandardMaterial({ color: 0x2288ff, emissive: 0x0066ff, emissiveIntensity: 2 })); blueBar.position.set(0.28, 1.56, -0.1);
+          grp.add(redBar, blueBar);
+        }
+        const wGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.28, 12); wGeo.rotateZ(Math.PI / 2);
+        const wMat = new THREE.MeshStandardMaterial({ color: 0x141418 });
+        [[-0.92, 1.3], [0.92, 1.3], [-0.92, -1.3], [0.92, -1.3]].forEach(([wx, wz]) => {
+          const w = new THREE.Mesh(wGeo, wMat); w.position.set(wx, 0.36, wz); grp.add(w); wheels.push(w);
+        });
+      }
+
+      grp.position.set(x, 0, z); grp.rotation.y = heading; scene.add(grp);
+      const ent = {
+        name, type, mesh: grp, bodyMesh: body, wheels, redBar, blueBar, x, z, heading, speed: 0,
+        halfWidth: isBus ? 1.25 : isAmb ? 1.05 : 1.0,
+        halfLength: isBus ? 4.15 : isAmb ? 2.55 : 2.15,
+        maxSpeed: isBus ? 18 : isAmb ? 27 : isSports ? 34 : 28,
+        accel: isBus ? 11 : isAmb ? 16 : isSports ? 22 : 17,
+        driver, axis, dir, health: 100, damageRatio: 0, busPassengerCount: 0,
+      };
+      vehicles.push(ent); return ent;
+    }
+
+    createCar('Cupê Brisa', 'coupe', 0x16f2d4, -52, -16, 0, 'none');
+    const missionCar = createCar('Solara GT', 'sports', 0xff2e93, -26, -16, Math.PI / 2, 'none');
+    createCar('Sedã Solar', 'sedan', 0xff8c38, ROAD_X[2] + 2.8, -80, 0, 'npc', 'z', 1);
+    createCar('Cupê Neon', 'coupe', 0xa855f7, ROAD_X[2] - 2.8, 65, Math.PI, 'npc', 'z', -1);
+    createCar('Esportivo', 'sports', 0xfacc15, -55, ROAD_Z[1] + 2.8, Math.PI / 2, 'npc', 'x', 1);
+    createCar('Viatura 01', 'police', 0x161926, ROAD_X[1] - 2.8, -96, Math.PI, 'police', 'z', -1);
+    createCar('Viatura 02', 'police', 0x161926, ROAD_X[0] + 2.8, 72, 0, 'police', 'z', 1);
+    createCar('Viatura 03', 'police', 0x161926, ROAD_X[2] - 2.8, 95, Math.PI, 'police', 'z', -1);
+    const bus1 = createCar('Ônibus Linha 01', 'bus', 0xf59e0b, 40.8, -8, 0, 'bus', 'z', 1);
+    const bus2 = createCar('Ônibus Linha 02', 'bus', 0xf59e0b, -55, -69.2, Math.PI / 2, 'bus', 'x', 1);
+    const samuAmb = createCar('Ambulância SAMU', 'ambulance', 0xf8fafc, -9.2, -32, 0, 'ambulance', 'z', 1);
+
+    const beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 8, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
+    beacon.visible = false; scene.add(beacon);
+
+    const registry = new BuildingRegistry(buildings);
+    const schedule = new ScheduleSystem();
+    const ragdolls = new RagdollPool(scene);
+    const crowd = new CrowdManager(scene, registry, schedule, 17.5);
+    const impact = new ImpactSystem();
+
+    // =========================================================================
+    // CLASSE 5B: TransitAndRescueSystem (Semáforos + Ônibus + Ambulância SAMU)
+    // =========================================================================
+    const BUS_LOOP_LEGS = [
+      { axis: 'x', dir: 1, laneCoord: -69.2, targetX: -9.2, targetZ: -69.2, stopIdx: 3 },
+      { axis: 'z', dir: 1, laneCoord: -9.2, targetX: -9.2, targetZ: -9.2, stopIdx: 1 },
+      { axis: 'x', dir: 1, laneCoord: -9.2, targetX: 40.8, targetZ: -9.2, stopIdx: null },
+      { axis: 'z', dir: 1, laneCoord: 40.8, targetX: 40.8, targetZ: 45.2, stopIdx: 0 },
+      { axis: 'x', dir: -1, laneCoord: 45.2, targetX: -74.8, targetZ: 45.2, stopIdx: null },
+      { axis: 'z', dir: -1, laneCoord: -74.8, targetX: -74.8, targetZ: -69.2, stopIdx: 2 },
+    ];
+    function createParamedicMesh() {
+      const root = new THREE.Group();
+      const legMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.7 });
+      const coatMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 });
+      const vestMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xb91c1c, emissiveIntensity: 0.35 });
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0xe0ac84, roughness: 0.7 });
+      const lLeg = new THREE.Group(); lLeg.position.set(-0.13, 0.72, 0);
+      const llM = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.72, 0.2), legMat); llM.position.y = -0.36; lLeg.add(llM);
+      const rLeg = new THREE.Group(); rLeg.position.set(0.13, 0.72, 0);
+      const rlM = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.72, 0.2), legMat); rlM.position.y = -0.36; rLeg.add(rlM);
+      const torso = new THREE.Group(); torso.position.set(0, 0.72, 0);
+      const tM = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.64, 0.28), coatMat); tM.position.y = 0.32; tM.castShadow = true;
+      const vM = new THREE.Mesh(new THREE.BoxGeometry(0.53, 0.28, 0.3), vestMat); vM.position.y = 0.34;
+      const hd = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.32), skinMat); hd.position.y = 0.82;
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.14, 0.35), vestMat); cap.position.y = 0.99;
+      torso.add(tM, vM, hd, cap);
+      const lArm = new THREE.Group(); lArm.position.set(-0.33, 1.3, 0);
+      const laM = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.54, 0.16), coatMat); laM.position.y = -0.24; lArm.add(laM);
+      const rArm = new THREE.Group(); rArm.position.set(0.33, 1.3, 0);
+      const raM = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.54, 0.16), coatMat); raM.position.y = -0.24; rArm.add(raM);
+      root.add(lLeg, rLeg, torso, lArm, rArm); root.visible = false; scene.add(root);
+      return { root, lLeg, rLeg, torso, lArm, rArm };
+    }
+    class TransitAndRescueSystem {
+      constructor() {
+        this.buses = [
+          { vehicle: bus1, legIndex: 3, stopTimer: 0, serviced: false, passengers: [] },
+          { vehicle: bus2, legIndex: 0, stopTimer: 0, serviced: false, passengers: [] },
+        ];
+        this.amb = samuAmb;
+        this.ambState = 'idle';
+        this.ambPath = [];
+        this.ambPathIdx = 0;
+        this.ambPatrolLeg = 1;
+        this.ambCooldown = 0;
+        this.totalRescued = 0;
+        this.bannerCooldown = 0;
+        this.paramedics = [0, 1].map((i) => ({ rig: createParamedicMesh(), x: 0, y: 0, z: 0, yaw: 0, phase: i * 1.4, slotIdx: -1, timer: 0, returning: false }));
+      }
+      getTotalPassengers() { return this.buses.reduce((s, b) => s + (b.vehicle.driver === 'bus' ? b.passengers.length : 0), 0); }
+      getAmbLabel() {
+        if (this.amb.driver !== 'ambulance') return 'Indisponível';
+        return this.ambState === 'en_route' ? 'A caminho' : this.ambState === 'treating' ? 'Atendendo' : this.ambState === 'returning' ? 'Retornando' : 'Pronta';
+      }
+      releaseBusPassengersOnHijack(veh) {
+        const bus = this.buses.find((b) => b.vehicle === veh);
+        if (!bus) return;
+        while (bus.passengers.length > 0) {
+          const a = crowd.agents[bus.passengers.pop()];
+          if (!a) continue;
+          a.state = 'FLEE'; a.boardedBusId = null; a.waitingBusStopIdx = -1; a.busDisembarkCooldown = 15;
+          a.x = veh.x + Math.cos(veh.heading) * 2.4 + (Math.random() - 0.5);
+          a.z = veh.z - Math.sin(veh.heading) * 2.4 + (Math.random() - 0.5);
+          a.y = groundHeightAt(a.x, a.z); a.inSimRange = true; a.visuallyActive = true; a.triggerFlee(veh.x, veh.z);
+        }
+        veh.busPassengerCount = 0;
+      }
+      computeSignalAndQueueSpeed(v, axis, dir, desiredSpeed) {
+        let allowed = desiredSpeed;
+        if (!crowd.graph.isVehicleAxisGreen(axis)) {
+          const crossList = axis === 'z' ? ROAD_Z : ROAD_X;
+          const posC = axis === 'z' ? v.z : v.x;
+          const backoff = 9.5 + v.halfLength;
+          for (const cc of crossList) {
+            const dStop = (cc - dir * backoff - posC) * dir;
+            if (dStop >= -0.8 && dStop <= 21.0) {
+              allowed = dStop <= 0.9 ? 0 : Math.min(allowed, Math.max(0, (dStop - 0.6) * 1.15));
+              break;
+            }
+          }
+        }
+        const sinH = dir * (axis === 'x' ? 1 : 0), cosH = dir * (axis === 'z' ? 1 : 0);
+        for (const o of vehicles) {
+          if (o === v) continue;
+          const dx = o.x - v.x, dz = o.z - v.z, fwd = dx * sinH + dz * cosH;
+          if (fwd <= 0 || fwd > 22) continue;
+          if (Math.abs(dx * cosH - dz * sinH) > v.halfWidth + o.halfWidth + 0.55) continue;
+          const gap = fwd - v.halfLength - o.halfLength;
+          if (gap <= 2.5) { allowed = 0; break; }
+          if (gap < 11.5) allowed = Math.min(allowed, Math.max(0, (gap - 2.3) * 1.55));
+        }
+        return allowed;
+      }
+      closestStopTo(px, pz) {
+        let best = 0, bestD = Infinity;
+        for (let i = 0; i < WORLD_POIS.busStops.length; i++) {
+          const bs = WORLD_POIS.busStops[i], d = (bs.waitX - px) ** 2 + (bs.waitZ - pz) ** 2;
+          if (d < bestD) { bestD = d; best = i; }
+        }
+        return best;
+      }
+      update(dt, elapsed) {
+        if (this.bannerCooldown > 0) this.bannerCooldown = Math.max(0, this.bannerCooldown - dt);
+        this.updateBuses(dt);
+        this.updateAmbulance(dt, elapsed);
+      }
+      updateBuses(dt) {
+        for (const bus of this.buses) {
+          const v = bus.vehicle;
+          if (v.driver !== 'bus') continue;
+          const leg = BUS_LOOP_LEGS[bus.legIndex];
+          v.axis = leg.axis; v.dir = leg.dir;
+          for (const idx of bus.passengers) { const a = crowd.agents[idx]; if (a) { a.x = v.x; a.z = v.z; a.y = v.mesh.position.y; } }
+          if (bus.stopTimer > 0) {
+            bus.stopTimer -= dt;
+            v.speed = THREE.MathUtils.damp(v.speed, 0, 8, dt);
+            if (bus.stopTimer <= 0) {
+              const stop = WORLD_POIS.busStops[leg.stopIdx], rem = [];
+              for (const idx of bus.passengers) {
+                const a = crowd.agents[idx]; if (!a) continue;
+                const destStop = a.commuteTargetPlace ? this.closestStopTo(a.commuteTargetPlace.entryX, a.commuteTargetPlace.entryZ) : leg.stopIdx;
+                if (destStop === leg.stopIdx) {
+                  a.state = 'WALK'; a.boardedBusId = null; a.waitingBusStopIdx = -1; a.busDisembarkCooldown = 28;
+                  a.x = stop.waitX + (Math.random() - 0.5) * 2.2; a.z = stop.waitZ + (Math.random() - 0.5) * 2.2;
+                  a.y = groundHeightAt(a.x, a.z); a.inSimRange = true; a.visuallyActive = true; a.fadeAlpha = 1; a.routineLabel = 'Desembarcou (Ônibus)';
+                  const n = crowd.graph.findClosestNode(a.x, a.z); a.currentNodeId = n.id; a.targetNodeId = n.edges[0]?.to ?? n.id;
+                } else rem.push(idx);
+              }
+              bus.passengers = rem;
+              for (const a of crowd.agents) {
+                if (bus.passengers.length >= 20) break;
+                if (!a.active || !a.visuallyActive || a.ragdollActive || a.insideBuilding || a.state !== 'BUS_WAIT') continue;
+                if (a.waitingBusStopIdx === leg.stopIdx || (a.x - stop.waitX) ** 2 + (a.z - stop.waitZ) ** 2 < 48) {
+                  a.state = 'ON_BUS'; a.boardedBusId = v.name; a.waitingBusStopIdx = -1; a.routineLabel = 'No Ônibus';
+                  a.x = v.x; a.z = v.z; bus.passengers.push(a.index);
+                }
+              }
+              v.busPassengerCount = bus.passengers.length;
+            }
+            v.mesh.position.set(v.x, groundHeightAt(v.x, v.z), v.z); v.mesh.rotation.y = v.heading; continue;
+          }
+          let stopOv = null;
+          if (leg.stopIdx !== null && !bus.serviced) {
+            const stop = WORLD_POIS.busStops[leg.stopIdx];
+            const distS = leg.axis === 'z' ? (stop.roadStopZ - v.z) * leg.dir : (stop.roadStopX - v.x) * leg.dir;
+            const wantsAlight = bus.passengers.some((idx) => { const a = crowd.agents[idx]; return a && this.closestStopTo(a.commuteTargetPlace?.entryX ?? stop.waitX, a.commuteTargetPlace?.entryZ ?? stop.waitZ) === leg.stopIdx; });
+            const wantsBoard = bus.passengers.length < 20 && crowd.agents.some((a) => a.active && !a.ragdollActive && !a.insideBuilding && a.state === 'BUS_WAIT' && (a.waitingBusStopIdx === leg.stopIdx || (a.x - stop.waitX) ** 2 + (a.z - stop.waitZ) ** 2 < 42));
+            if ((wantsAlight || wantsBoard) && distS >= -0.8 && distS <= 20) {
+              if (distS <= 1.1) { bus.stopTimer = 2.6; bus.serviced = true; v.speed = 0; stopOv = 0; }
+              else stopOv = Math.max(2.2, distS * 0.9);
+            }
+          }
+          const base = 12.5 * weatherEffects.npcTrafficSpeedMult;
+          const targetSpd = this.computeSignalAndQueueSpeed(v, leg.axis, leg.dir, stopOv !== null ? Math.min(base, stopOv) : base);
+          v.speed = THREE.MathUtils.damp(v.speed, targetSpd, 4.2, dt);
+          const dh = leg.axis === 'z' ? (leg.dir === 1 ? 0 : Math.PI) : (leg.dir === 1 ? Math.PI / 2 : -Math.PI / 2);
+          let diff = dh - v.heading; while (diff > Math.PI) diff -= Math.PI * 2; while (diff < -Math.PI) diff += Math.PI * 2;
+          v.heading += diff * Math.min(1, dt * 7.5);
+          if (leg.axis === 'z') {
+            v.x += (leg.laneCoord - v.x) * Math.min(1, dt * 6); v.z += leg.dir * v.speed * dt;
+            if ((v.z - leg.targetZ) * leg.dir >= 0) { v.z = leg.targetZ; bus.legIndex = (bus.legIndex + 1) % BUS_LOOP_LEGS.length; bus.serviced = false; }
+          } else {
+            v.z += (leg.laneCoord - v.z) * Math.min(1, dt * 6); v.x += leg.dir * v.speed * dt;
+            if ((v.x - leg.targetX) * leg.dir >= 0) { v.x = leg.targetX; bus.legIndex = (bus.legIndex + 1) % BUS_LOOP_LEGS.length; bus.serviced = false; }
+          }
+          v.mesh.position.set(v.x, groundHeightAt(v.x, v.z), v.z); v.mesh.rotation.y = v.heading;
+          v.wheels.forEach((w) => (w.rotation.x += (v.speed * dt) / 0.45));
+          v.busPassengerCount = bus.passengers.length;
+        }
+      }
+      hideParamedics() {
+        this.paramedics.forEach((p) => { p.rig.root.visible = false; p.slotIdx = -1; p.timer = 0; p.returning = false; });
+      }
+      nearestInter(x, z) {
+        let bx = 0, bz = 0, bd = Infinity;
+        for (let ix = 0; ix < ROAD_X.length; ix++) for (let iz = 0; iz < ROAD_Z.length; iz++) {
+          const d = (ROAD_X[ix] - x) ** 2 + (ROAD_Z[iz] - z) ** 2; if (d < bd) { bd = d; bx = ix; bz = iz; }
+        }
+        return { ix: bx, iz: bz };
+      }
+      projectRoad(vx, vz) {
+        let bx = ROAD_X[1], bz = vz, bd = Infinity;
+        for (const rx of ROAD_X) { const cz = Math.max(-116, Math.min(116, vz)), d = (rx - vx) ** 2 + (cz - vz) ** 2; if (d < bd) { bd = d; bx = rx + (vx >= rx ? 2.8 : -2.8); bz = cz; } }
+        for (const rz of ROAD_Z) { const cx = Math.max(-116, Math.min(38, vx)), d = (cx - vx) ** 2 + (rz - vz) ** 2; if (d < bd) { bd = d; bx = cx; bz = rz + (vz >= rz ? 2.8 : -2.8); } }
+        return { x: bx, z: bz };
+      }
+      bfsPath(sx, sz, gx, gz) {
+        const key = (ix, iz) => ix * 3 + iz, q = [{ ix: sx, iz: sz }], par = new Map(), vis = new Set([key(sx, sz)]);
+        while (q.length) {
+          const c = q.shift(); if (c.ix === gx && c.iz === gz) break;
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nx = c.ix + dx, nz = c.iz + dz;
+            if (nx < 0 || nx >= ROAD_X.length || nz < 0 || nz >= ROAD_Z.length) continue;
+            const nk = key(nx, nz); if (vis.has(nk)) continue;
+            vis.add(nk); par.set(nk, key(c.ix, c.iz)); q.push({ ix: nx, iz: nz });
+          }
+        }
+        const res = []; let ck = key(gx, gz);
+        while (ck !== undefined) { res.push({ ix: Math.floor(ck / 3), iz: ck % 3 }); ck = par.get(ck); }
+        res.reverse(); return res;
+      }
+      updateAmbulance(dt, elapsed) {
+        const amb = this.amb;
+        if (amb.driver !== 'ambulance') { this.hideParamedics(); this.ambState = 'idle'; return; }
+        if (this.ambCooldown > 0) this.ambCooldown = Math.max(0, this.ambCooldown - dt);
+        if (amb.redBar && amb.blueBar) {
+          const active = this.ambState === 'en_route' || this.ambState === 'treating';
+          const fl = Math.sin(elapsed * 18) > 0;
+          amb.redBar.material.emissiveIntensity = active ? (fl ? 3.5 : 0.25) : 0.35;
+          amb.blueBar.material.emissiveIntensity = active ? (fl ? 0.25 : 3.5) : 0.35;
+        }
+        if (this.ambState === 'idle' && this.ambCooldown <= 0) {
+          let vic = null, bd = Infinity;
+          for (const r of ragdolls.slots) {
+            if (!r.active || (r.outcome !== 'unconscious' && r.outcome !== 'out')) continue;
+            const d = Math.hypot(r.x - amb.x, r.z - amb.z); if (d < bd) { bd = d; vic = r; }
+          }
+          if (vic) {
+            for (const r of ragdolls.slots) if (r.active && (r.outcome === 'unconscious' || r.outcome === 'out')) r.beingRescued = true;
+            const sn = this.nearestInter(amb.x, amb.z), gr = this.projectRoad(vic.x, vic.z), gn = this.nearestInter(gr.x, gr.z);
+            this.ambPath = this.bfsPath(sn.ix, sn.iz, gn.ix, gn.iz).map((n) => ({ x: ROAD_X[n.ix], z: ROAD_Z[n.iz] }));
+            const last = this.ambPath[this.ambPath.length - 1];
+            if (!last || Math.hypot(last.x - gr.x, last.z - gr.z) > 4) this.ambPath.push(gr);
+            this.ambPathIdx = 0; this.ambState = 'en_route';
+            if (this.bannerCooldown <= 0) { showToast('Ambulância SAMU despachada para atender feridos!'); this.bannerCooldown = 8; }
+          }
+        }
+        if (this.ambState === 'idle') {
+          this.hideParamedics();
+          const leg = BUS_LOOP_LEGS[this.ambPatrolLeg];
+          amb.axis = leg.axis; amb.dir = leg.dir;
+          const spd = this.computeSignalAndQueueSpeed(amb, leg.axis, leg.dir, 10.5 * weatherEffects.npcTrafficSpeedMult);
+          amb.speed = THREE.MathUtils.damp(amb.speed, spd, 4, dt);
+          const dh = leg.axis === 'z' ? (leg.dir === 1 ? 0 : Math.PI) : (leg.dir === 1 ? Math.PI / 2 : -Math.PI / 2);
+          let diff = dh - amb.heading; while (diff > Math.PI) diff -= Math.PI * 2; while (diff < -Math.PI) diff += Math.PI * 2;
+          amb.heading += diff * Math.min(1, dt * 7);
+          if (leg.axis === 'z') {
+            amb.x += (leg.laneCoord - amb.x) * Math.min(1, dt * 5); amb.z += leg.dir * amb.speed * dt;
+            if ((amb.z - leg.targetZ) * leg.dir >= 0) { amb.z = leg.targetZ; this.ambPatrolLeg = (this.ambPatrolLeg + 1) % BUS_LOOP_LEGS.length; }
+          } else {
+            amb.z += (leg.laneCoord - amb.z) * Math.min(1, dt * 5); amb.x += leg.dir * amb.speed * dt;
+            if ((amb.x - leg.targetX) * leg.dir >= 0) { amb.x = leg.targetX; this.ambPatrolLeg = (this.ambPatrolLeg + 1) % BUS_LOOP_LEGS.length; }
+          }
+        } else if (this.ambState === 'en_route') {
+          for (const r of ragdolls.slots) if (r.active && (r.outcome === 'unconscious' || r.outcome === 'out')) r.beingRescued = true;
+          const wp = this.ambPath[this.ambPathIdx];
+          if (!wp) {
+            this.beginTreatment();
+          } else {
+            const dx = wp.x - amb.x, dz = wp.z - amb.z, dist = Math.hypot(dx, dz), isLast = this.ambPathIdx >= this.ambPath.length - 1;
+            if (dist < (isLast ? 5.2 : 4.2)) {
+              this.ambPathIdx++;
+              if (this.ambPathIdx >= this.ambPath.length) this.beginTreatment();
+            } else {
+              const dh = Math.atan2(dx, dz); let diff = dh - amb.heading;
+              while (diff > Math.PI) diff -= Math.PI * 2; while (diff < -Math.PI) diff += Math.PI * 2;
+              amb.heading += THREE.MathUtils.clamp(diff, -3.4 * dt, 3.4 * dt);
+              let spd = (isLast && dist < 12 ? Math.max(5, dist * 1.1) : 17.5 * (Math.abs(diff) > 0.55 ? 0.52 : 1)) * (0.84 + 0.16 * weatherEffects.npcTrafficSpeedMult);
+              const sH = Math.sin(amb.heading), cH = Math.cos(amb.heading);
+              for (const o of vehicles) {
+                if (o === amb) continue;
+                const odx = o.x - amb.x, odz = o.z - amb.z, fwd = odx * sH + odz * cH;
+                if (fwd > 0 && fwd < 10 && Math.abs(odx * cH - odz * sH) < 2.2) { spd = Math.min(spd, 4.5); amb.heading += (odx * cH - odz * sH >= 0 ? -1.4 : 1.4) * dt; }
+              }
+              amb.speed = THREE.MathUtils.damp(amb.speed, spd, 5, dt);
+              amb.x += Math.sin(amb.heading) * amb.speed * dt; amb.z += Math.cos(amb.heading) * amb.speed * dt;
+            }
+          }
+        } else if (this.ambState === 'treating') {
+          amb.speed = THREE.MathUtils.damp(amb.speed, 0, 8, dt);
+          for (const r of ragdolls.slots) if (r.active && (r.outcome === 'unconscious' || r.outcome === 'out')) r.beingRescued = true;
+          this.stepParamedics(dt);
+        } else if (this.ambState === 'returning') {
+          amb.speed = THREE.MathUtils.damp(amb.speed, 0, 6, dt);
+          this.ambCooldown = 2.0;
+          let best = 0, bd = Infinity;
+          BUS_LOOP_LEGS.forEach((l, i) => { const d = (l.targetX - amb.x) ** 2 + (l.targetZ - amb.z) ** 2; if (d < bd) { bd = d; best = i; } });
+          this.ambPatrolLeg = best; this.ambState = 'idle';
+        }
+        amb.mesh.position.set(amb.x, groundHeightAt(amb.x, amb.z), amb.z); amb.mesh.rotation.y = amb.heading;
+        amb.wheels.forEach((w) => (w.rotation.x += (amb.speed * dt) / 0.38));
+      }
+      beginTreatment() {
+        const amb = this.amb; this.ambState = 'treating';
+        const bx = amb.x - Math.sin(amb.heading) * 3.4, bz = amb.z - Math.cos(amb.heading) * 3.4;
+        const sx = Math.cos(amb.heading), sz = -Math.sin(amb.heading);
+        this.paramedics.forEach((p, i) => {
+          const off = i === 0 ? -0.9 : 0.9;
+          p.x = bx + sx * off; p.z = bz + sz * off; p.y = groundHeightAt(p.x, p.z); p.yaw = amb.heading + Math.PI;
+          p.slotIdx = -1; p.timer = 0; p.returning = false; p.rig.root.visible = true; p.rig.root.position.set(p.x, p.y, p.z);
+        });
+      }
+      stepParamedics(dt) {
+        const amb = this.amb, claimed = new Set();
+        this.paramedics.forEach((p) => { if (p.slotIdx >= 0 && ragdolls.slots[p.slotIdx]?.active) claimed.add(p.slotIdx); });
+        this.paramedics.forEach((p) => {
+          if (p.slotIdx >= 0 && ragdolls.slots[p.slotIdx]?.active) return;
+          let bi = -1, bd = 75 * 75;
+          ragdolls.slots.forEach((r, i) => {
+            if (!r.active || claimed.has(i) || (r.outcome !== 'unconscious' && r.outcome !== 'out')) return;
+            const d = (r.x - amb.x) ** 2 + (r.z - amb.z) ** 2; if (d < bd) { bd = d; bi = i; }
+          });
+          if (bi !== -1) { p.slotIdx = bi; p.timer = 0; p.returning = false; claimed.add(bi); }
+          else { p.slotIdx = -1; p.returning = true; }
+        });
+        const doorX = amb.x - Math.sin(amb.heading) * 3.3, doorZ = amb.z - Math.cos(amb.heading) * 3.3;
+        let allBack = true;
+        for (const p of this.paramedics) {
+          if (!p.rig.root.visible) continue;
+          if (!p.returning && p.slotIdx >= 0) {
+            const slot = ragdolls.slots[p.slotIdx];
+            if (!slot || !slot.active) { p.slotIdx = -1; p.timer = 0; continue; }
+            allBack = false;
+            const dx = slot.x - p.x, dz = slot.z - p.z, dist = Math.hypot(dx, dz);
+            if (dist > 1.25) {
+              p.x += (dx / dist) * 4.6 * dt; p.z += (dz / dist) * 4.6 * dt; p.yaw = Math.atan2(dx, dz); p.phase += dt * 11;
+              const sw = Math.sin(p.phase) * 0.65;
+              p.rig.lLeg.rotation.x = sw; p.rig.rLeg.rotation.x = -sw; p.rig.lArm.rotation.x = -sw * 0.7; p.rig.rArm.rotation.x = sw * 0.5; p.rig.torso.rotation.x = 0.08;
+            } else {
+              p.yaw = Math.atan2(dx, dz); p.timer += dt; p.phase += dt * 9;
+              p.rig.lLeg.rotation.x = -0.35; p.rig.rLeg.rotation.x = 0.35; p.rig.torso.rotation.x = 0.45;
+              p.rig.lArm.rotation.x = -1.1 + Math.sin(p.phase) * 0.35; p.rig.rArm.rotation.x = -1.1 - Math.sin(p.phase) * 0.35;
+              if (p.timer >= 2.0) {
+                const npc = crowd.agents[slot.npcIndex], wasUnc = slot.outcome === 'unconscious', rx = slot.x, rz = slot.z;
+                ragdolls.rescueSlot(p.slotIdx); this.totalRescued++;
+                if (npc) {
+                  npc.ragdollActive = false;
+                  if (wasUnc) {
+                    npc.health = Math.round(npc.maxHealth * 0.55); npc.injuryStatus = 'injured'; npc.injuredTimer = 0;
+                    npc.x = Math.max(-124, Math.min(71, rx)); npc.z = Math.max(-124, Math.min(124, rz));
+                    npc.y = groundHeightAt(npc.x, npc.z); npc.inSimRange = true; npc.visuallyActive = true; npc.fadeAlpha = 1;
+                    npc.state = 'LIMP'; npc.stateTimer = 4; npc.routineLabel = 'Socorrido (SAMU)';
+                  } else { npc.injuryStatus = 'out'; npc.visuallyActive = false; }
+                }
+                if (this.bannerCooldown <= 0) { showToast(wasUnc ? 'Paramédicos reanimaram cidadão no local!' : 'Paramédicos removeram vítima da via.'); this.bannerCooldown = 5; }
+                p.slotIdx = -1; p.timer = 0;
+              }
+            }
+          } else {
+            const dx = doorX - p.x, dz = doorZ - p.z, dist = Math.hypot(dx, dz);
+            if (dist > 1.45) {
+              allBack = false; p.x += (dx / dist) * 4.2 * dt; p.z += (dz / dist) * 4.2 * dt; p.yaw = Math.atan2(dx, dz); p.phase += dt * 10;
+              const sw = Math.sin(p.phase) * 0.55;
+              p.rig.lLeg.rotation.x = sw; p.rig.rLeg.rotation.x = -sw; p.rig.lArm.rotation.x = -sw * 0.6; p.rig.rArm.rotation.x = sw * 0.5; p.rig.torso.rotation.x = 0.05;
+            } else p.rig.root.visible = false;
+          }
+          p.y = groundHeightAt(p.x, p.z); p.rig.root.position.set(p.x, p.y, p.z); p.rig.root.rotation.y = p.yaw;
+        }
+        if (allBack) { this.hideParamedics(); this.ambState = 'returning'; }
+      }
+    }
+    const transit = new TransitAndRescueSystem();
+
+    // =========================================================================
+    // CLASSE 6: WeatherSystem (Chuva, Neblina, Calor Intenso)
+    // =========================================================================
+    const WEATHER_ORDER = ['clear', 'rain', 'fog', 'heat'];
+    const WEATHER_LABELS = { clear: 'Céu Limpo', rain: 'Chuva Tropical', fog: 'Neblina Densa', heat: 'Calor Intenso' };
+    class WeatherSystem {
+      constructor(sceneRef) {
+        this.current = 'clear'; this.autoTimer = 75;
+        this.rainLevel = 0; this.fogLevel = 0; this.heatLevel = 0; this.wetness = 0;
+        this.lightningTimer = 7; this.lightningBoost = 0;
+        this.rainCount = 900; this.rainPos = new Float32Array(this.rainCount * 6); this.rainSeeds = new Float32Array(this.rainCount * 4);
+        for (let i = 0; i < this.rainCount; i++) {
+          this.rainSeeds[i * 4] = (Math.random() - 0.5) * 86; this.rainSeeds[i * 4 + 1] = Math.random() * 26;
+          this.rainSeeds[i * 4 + 2] = (Math.random() - 0.5) * 86; this.rainSeeds[i * 4 + 3] = 22 + Math.random() * 10;
+        }
+        const rGeo = new THREE.BufferGeometry();
+        this.rAttr = new THREE.BufferAttribute(this.rainPos, 3); this.rAttr.setUsage(THREE.DynamicDrawUsage); rGeo.setAttribute('position', this.rAttr);
+        this.rainLines = new THREE.LineSegments(rGeo, new THREE.LineBasicMaterial({ color: 0xa5d8ff, transparent: true, opacity: 0.48, depthWrite: false }));
+        this.rainLines.frustumCulled = false; this.rainLines.visible = false; sceneRef.add(this.rainLines);
+
+        this.heatCount = 90; this.heatPos = new Float32Array(this.heatCount * 3); this.heatSeeds = new Float32Array(this.heatCount * 3);
+        for (let i = 0; i < this.heatCount; i++) {
+          this.heatSeeds[i * 3] = (Math.random() - 0.5) * 68; this.heatSeeds[i * 3 + 1] = 0.3 + Math.random() * 5.5; this.heatSeeds[i * 3 + 2] = (Math.random() - 0.5) * 68;
+        }
+        const hGeo = new THREE.BufferGeometry();
+        this.hAttr = new THREE.BufferAttribute(this.heatPos, 3); this.hAttr.setUsage(THREE.DynamicDrawUsage); hGeo.setAttribute('position', this.hAttr);
+        this.heatMat = new THREE.PointsMaterial({ color: 0xffd07a, size: 0.28, transparent: true, opacity: 0, depthWrite: false });
+        this.heatPoints = new THREE.Points(hGeo, this.heatMat); this.heatPoints.frustumCulled = false; this.heatPoints.visible = false; sceneRef.add(this.heatPoints);
+        this.effects = { current: 'clear', label: WEATHER_LABELS.clear, rainIntensity: 0, fogDensity: 0.0052, wetness: 0, grip: 1, accelMult: 1, brakeMult: 1, lateralDriftMult: 0, npcTrafficSpeedMult: 1, sunMultiplier: 1, neonMultiplier: 1, exposure: 1.12, lightningBoost: 0, skyTintHex: 0xffffff, skyTintAlpha: 0, fogTintHex: 0xffffff, fogTintAlpha: 0 };
+      }
+      cycleWeather() {
+        this.current = WEATHER_ORDER[(WEATHER_ORDER.indexOf(this.current) + 1) % WEATHER_ORDER.length];
+        this.autoTimer = 85; return this.current;
+      }
+      update(dt, px, pz, isNight, tScale) {
+        this.autoTimer -= dt * Math.min(4, Math.max(1, Math.sqrt(tScale)));
+        if (this.autoTimer <= 0) this.cycleWeather();
+        const tR = this.current === 'rain' ? 1 : 0, tF = this.current === 'fog' ? 1 : 0, tH = this.current === 'heat' ? 1 : 0;
+        const b = 1 - Math.exp(-1.1 * dt);
+        this.rainLevel += (tR - this.rainLevel) * b; this.fogLevel += (tF - this.fogLevel) * b; this.heatLevel += (tH - this.heatLevel) * b;
+        this.wetness = THREE.MathUtils.clamp(this.wetness + (tR > 0.5 ? 0.35 : -0.14) * dt, 0, 1);
+        if (this.rainLevel > 0.55 && (this.lightningTimer -= dt) <= 0) { this.lightningBoost = 2.4; this.lightningTimer = 7 + Math.random() * 11; }
+        if (this.lightningBoost > 0) this.lightningBoost = Math.max(0, this.lightningBoost - dt * 9.5);
+
+        if (this.rainLevel > 0.03) {
+          this.rainLines.visible = true; this.rainLines.material.opacity = 0.52 * this.rainLevel;
+          const wx = -3.4 * this.rainLevel, wz = -1.6 * this.rainLevel;
+          for (let i = 0; i < this.rainCount; i++) {
+            const k = i * 4; let rx = this.rainSeeds[k] + wx * dt, ry = this.rainSeeds[k + 1] - this.rainSeeds[k + 3] * dt, rz = this.rainSeeds[k + 2] + wz * dt;
+            if (ry < 0) { ry += 26; rx = (Math.random() - 0.5) * 86; rz = (Math.random() - 0.5) * 86; }
+            this.rainSeeds[k] = rx; this.rainSeeds[k + 1] = ry; this.rainSeeds[k + 2] = rz;
+            const p = i * 6; this.rainPos[p] = px + rx; this.rainPos[p + 1] = ry; this.rainPos[p + 2] = pz + rz;
+            this.rainPos[p + 3] = px + rx - wx * 0.035; this.rainPos[p + 4] = ry + 0.95; this.rainPos[p + 5] = pz + rz - wz * 0.035;
+          }
+          this.rAttr.needsUpdate = true;
+        } else this.rainLines.visible = false;
+
+        if (this.heatLevel > 0.04) {
+          this.heatPoints.visible = true; this.heatMat.opacity = 0.28 * this.heatLevel;
+          for (let i = 0; i < this.heatCount; i++) {
+            const s = i * 3; let hy = this.heatSeeds[s + 1] + (0.85 + (i % 5) * 0.15) * dt; if (hy > 6.5) hy = 0.2;
+            this.heatSeeds[s + 1] = hy;
+            this.heatPos[s] = px + this.heatSeeds[s]; this.heatPos[s + 1] = hy; this.heatPos[s + 2] = pz + this.heatSeeds[s + 2];
+          }
+          this.hAttr.needsUpdate = true;
+        } else this.heatPoints.visible = false;
+
+        const e = this.effects;
+        e.current = this.current; e.label = WEATHER_LABELS[this.current]; e.rainIntensity = this.rainLevel;
+        e.wetness = this.wetness;
+        e.grip = THREE.MathUtils.clamp(1 - this.wetness * 0.42 - this.fogLevel * 0.14 - this.heatLevel * 0.05, 0.52, 1);
+        e.accelMult = 1 - this.wetness * 0.16 - this.fogLevel * 0.06 - this.heatLevel * 0.04;
+        e.brakeMult = 1 - this.wetness * 0.46 - this.fogLevel * 0.18 - this.heatLevel * 0.05;
+        e.lateralDriftMult = this.wetness + this.fogLevel * 0.22 + this.heatLevel * 0.06;
+        e.npcTrafficSpeedMult = 1 - this.rainLevel * 0.22 - this.fogLevel * 0.35;
+        e.fogDensity = 0.0052 + this.rainLevel * 0.0046 + this.fogLevel * 0.0205 + this.heatLevel * 0.0014;
+        e.sunMultiplier = 1 - this.rainLevel * 0.5 - this.fogLevel * 0.34 + this.heatLevel * 0.38;
+        e.neonMultiplier = 1 + this.rainLevel * 0.55 + this.fogLevel * 0.4 - this.heatLevel * 0.2;
+        e.exposure = 1.12 - this.rainLevel * 0.14 - this.fogLevel * 0.06 + this.heatLevel * 0.18;
+        e.lightningBoost = this.lightningBoost;
+        e.skyTintAlpha = 0; e.fogTintAlpha = 0;
+        if (this.rainLevel >= this.fogLevel && this.rainLevel >= this.heatLevel && this.rainLevel > 0.02) {
+          e.skyTintHex = isNight ? 0x0c1428 : 0x3b4d6b; e.fogTintHex = isNight ? 0x111c36 : 0x475c7a;
+          e.skyTintAlpha = 0.72 * this.rainLevel; e.fogTintAlpha = 0.78 * this.rainLevel;
+        } else if (this.fogLevel >= this.heatLevel && this.fogLevel > 0.02) {
+          e.skyTintHex = isNight ? 0x222c47 : 0x9aaec9; e.fogTintHex = isNight ? 0x293554 : 0xb3c4db;
+          e.skyTintAlpha = 0.82 * this.fogLevel; e.fogTintAlpha = 0.88 * this.fogLevel;
+        } else if (this.heatLevel > 0.02) {
+          e.skyTintHex = isNight ? 0x452236 : 0xffaa5c; e.fogTintHex = isNight ? 0x52293e : 0xffc078;
+          e.skyTintAlpha = 0.45 * this.heatLevel; e.fogTintAlpha = 0.52 * this.heatLevel;
+        }
+        return e;
+      }
+    }
+    const weatherSystem = new WeatherSystem(scene);
+    let weatherEffects = weatherSystem.effects;
+
+    const playerPos = new THREE.Vector3(-42, 0, -16);
+    let playerVelY = 0, playerYaw = 0.7, isGrounded = true, walkTime = 0;
+    let camYaw = 0.7, camPitch = 0.28, draggingCam = false, lastPX = 0, lastPY = 0;
+    let currentCar = null, money = 500, wantedStars = 0, evadeTimer = 0, bustTimer = 0;
+    let gameTime = 17.5, dayNumber = 1, timeScale = 1, hitStopTimer = 0, camShake = 0;
+    let showWaypoints = false, showColliders = false, showRoutineLabels = false, showDebugPanel = false, qualityPreset = 'medium';
+    let waypointGrp = null, colliderGrps = null;
+    let activeMission = 'none', missionStep = 0, targetPos = null;
+    const keys = new Set();
+
+    const labelsCanvas = document.getElementById('debug-labels-canvas');
+    const labelsCtx = labelsCanvas.getContext('2d');
+    const minimapCtx = document.getElementById('minimap').getContext('2d');
+    const uiToast = document.getElementById('toast');
+    const showToast = (m) => { uiToast.textContent = m; uiToast.style.display = 'block'; clearTimeout(showToast._t); showToast._t = setTimeout(() => { uiToast.style.display = 'none'; }, 3000); };
+
+    const toggleDebugPanel = () => {
+      showDebugPanel = !showDebugPanel;
+      document.getElementById('debug-panel').style.display = showDebugPanel ? 'block' : 'none';
+      const st = document.getElementById('dbg-toggle-state');
+      st.textContent = showDebugPanel ? 'Aberto' : 'Oculto';
+      st.style.color = showDebugPanel ? '#22d3ee' : '#64748b';
+    };
+    const setQualityPreset = (preset) => {
+      qualityPreset = preset;
+      const cfg = QUALITY_SETTINGS[preset];
+      crowd.setQualityPreset(preset);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, cfg.maxPixelRatio));
+      renderer.shadowMap.enabled = cfg.shadows;
+      sunLight.castShadow = cfg.shadows;
+      document.getElementById('dbg-qual-lbl').textContent = `${cfg.label} (${cfg.maxVisibleNpcs})`;
+      document.getElementById('btn-qual-low').className = preset === 'low' ? 'dbg-btn on-cyan' : 'dbg-btn';
+      document.getElementById('btn-qual-med').className = preset === 'medium' ? 'dbg-btn on-cyan' : 'dbg-btn';
+      document.getElementById('btn-qual-high').className = preset === 'high' ? 'dbg-btn on-cyan' : 'dbg-btn';
+      showToast(`Qualidade: ${cfg.label} (${cfg.maxVisibleNpcs} NPCs visíveis)`);
+    };
+    const toggleWaypoints = () => {
+      showWaypoints = !showWaypoints;
+      if (!waypointGrp) { waypointGrp = crowd.graph.getDebugVisualGroup(); scene.add(waypointGrp); }
+      waypointGrp.visible = showWaypoints;
+      const b = document.getElementById('btn-waypoints');
+      b.textContent = showWaypoints ? 'Waypoints: ON (G)' : 'Waypoints: OFF (G)';
+      b.className = showWaypoints ? 'dbg-btn on-cyan' : 'dbg-btn';
+    };
+    const toggleColliders = () => {
+      showColliders = !showColliders;
+      if (!colliderGrps) { colliderGrps = registry.getDebugColliderGroups(buildings, vehicles, MAX_NPCS); scene.add(colliderGrps.staticGroup); scene.add(colliderGrps.dynamicGroup); }
+      colliderGrps.staticGroup.visible = showColliders; colliderGrps.dynamicGroup.visible = showColliders;
+      document.getElementById('btn-colliders').className = showColliders ? 'dbg-btn on-pink' : 'dbg-btn';
+    };
+    const toggleLabels = () => {
+      showRoutineLabels = !showRoutineLabels;
+      if (!showRoutineLabels) labelsCtx.clearRect(0, 0, labelsCanvas.width, labelsCanvas.height);
+      document.getElementById('btn-labels').className = showRoutineLabels ? 'dbg-btn on-sky' : 'dbg-btn';
+    };
+    const cycleSpeed = () => {
+      timeScale = timeScale === 1 ? 10 : timeScale === 10 ? 60 : 1;
+      const b = document.getElementById('btn-speed'); b.textContent = `${timeScale}x (T)`;
+      b.className = timeScale > 1 ? 'dbg-btn on-amber' : 'dbg-btn';
+      showToast(`Velocidade do relógio: ${timeScale}x`);
+    };
+    const cycleWeather = () => {
+      const next = weatherSystem.cycleWeather();
+      showToast(`Clima: ${WEATHER_LABELS[next]}`);
+    };
+
+    document.getElementById('debug-toggle-btn').onclick = toggleDebugPanel;
+    document.getElementById('btn-qual-low').onclick = () => setQualityPreset('low');
+    document.getElementById('btn-qual-med').onclick = () => setQualityPreset('medium');
+    document.getElementById('btn-qual-high').onclick = () => setQualityPreset('high');
+    document.getElementById('btn-waypoints').onclick = toggleWaypoints;
+    document.getElementById('btn-colliders').onclick = toggleColliders;
+    document.getElementById('btn-labels').onclick = toggleLabels;
+    document.getElementById('btn-speed').onclick = cycleSpeed;
+    document.getElementById('btn-weather').onclick = cycleWeather;
+    document.getElementById('btn-spawn10').onclick = () => { crowd.spawnTestGroupInFront(playerPos.x, playerPos.z, currentCar ? currentCar.heading : playerYaw, 10); showToast('10 NPCs spawnados à frente!'); };
+    document.getElementById('btn-time').onclick = () => { const p = gameTime; gameTime = (gameTime + 4) % 24; if (gameTime < p) dayNumber++; };
+    document.getElementById('btn-m1').onclick = () => {
+      activeMission = 'm1'; missionStep = 1; targetPos = { x: missionCar.x, z: missionCar.z };
+      beacon.position.set(targetPos.x, 4, targetPos.z); beacon.visible = true;
+      document.getElementById('mission-title').textContent = 'Missão 1: Carga Quente';
+      document.getElementById('mission-desc').textContent = 'Entre no Solara GT rosa (F) e leve até a Marina do Píer.';
+    };
+    document.getElementById('btn-m2').onclick = () => {
+      activeMission = 'm2'; missionStep = 1; targetPos = { x: 68, z: -56 };
+      beacon.position.set(68, 4, -56); beacon.visible = true;
+      document.getElementById('mission-title').textContent = 'Missão 2: Maleta da Orla';
+      document.getElementById('mission-desc').textContent = 'Vá até a praia leste e recupere a maleta.';
+    };
+
+    window.addEventListener('keydown', (e) => {
+      audio.unlock(); keys.add(e.code);
+      if (e.code === 'F3' && !e.repeat) { e.preventDefault(); toggleDebugPanel(); }
+      if (e.code === 'KeyG' && !e.repeat) toggleWaypoints();
+      if (e.code === 'KeyP' && !e.repeat) toggleColliders();
+      if (e.code === 'KeyH' && !e.repeat) toggleLabels();
+      if (e.code === 'KeyT' && !e.repeat) cycleSpeed();
+      if (e.code === 'KeyC' && !e.repeat) cycleWeather();
+      if (e.code === 'KeyK' && !e.repeat) { crowd.spawnTestGroupInFront(playerPos.x, playerPos.z, currentCar ? currentCar.heading : playerYaw, 10); showToast('10 NPCs spawnados à frente!'); }
+      if (e.code === 'KeyB' && !e.repeat && currentCar) {
+        audio.playHorn();
+        crowd.agents.forEach((a) => { if (a.visuallyActive && !a.insideBuilding && Math.hypot(a.x - currentCar.x, a.z - currentCar.z) < 26) a.triggerFlee(currentCar.x, currentCar.z); });
+      }
+      if (e.code === 'KeyF' && !e.repeat) {
+        if (currentCar) { currentCar.driver = 'none'; playerPos.set(currentCar.x - Math.cos(currentCar.heading) * 2.5, 0, currentCar.z + Math.sin(currentCar.heading) * 2.5); currentCar = null; playerRig.visible = true; }
+        else {
+          const near = vehicles.find((v) => Math.hypot(v.x - playerPos.x, v.z - playerPos.z) < 4.8);
+          if (near) {
+            if (near.driver === 'bus') transit.releaseBusPassengersOnHijack(near);
+            if (near.driver === 'npc' || near.driver === 'police' || near.driver === 'bus' || near.driver === 'ambulance') wantedStars = Math.min(3, Math.max(wantedStars, 1));
+            near.driver = 'player'; currentCar = near; playerRig.visible = false;
+            if (activeMission === 'm1' && missionStep === 1 && near === missionCar) {
+              missionStep = 2; targetPos = { x: 48, z: 48 }; beacon.position.set(48, 4, 48); wantedStars = Math.max(wantedStars, 1);
+              document.getElementById('mission-desc').textContent = 'Leve o Solara GT até a Marina do Píer!';
+            }
+          }
+        }
+      }
+      if (e.code === 'Space' && !e.repeat && !currentCar && isGrounded) { playerVelY = 8.4; isGrounded = false; }
+    });
+    window.addEventListener('keyup', (e) => keys.delete(e.code));
+    renderer.domElement.addEventListener('pointerdown', (e) => { audio.unlock(); draggingCam = true; lastPX = e.clientX; lastPY = e.clientY; });
+    window.addEventListener('pointermove', (e) => { if (!draggingCam) return; camYaw -= (e.clientX - lastPX) * 0.005; camPitch = THREE.MathUtils.clamp(camPitch + (e.clientY - lastPY) * 0.004, 0.08, 0.9); lastPX = e.clientX; lastPY = e.clientY; });
+    window.addEventListener('pointerup', () => { draggingCam = false; });
+    window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+    function resolveCollisions(pos, r) {
+      pos.x = THREE.MathUtils.clamp(pos.x, -126, Math.abs(pos.z - 48) < 4.5 ? 98 : 74);
+      pos.z = THREE.MathUtils.clamp(pos.z, -126, 126);
+      for (const b of buildings) {
+        const minX = b.x - b.halfW - r, maxX = b.x + b.halfW + r, minZ = b.z - b.halfD - r, maxZ = b.z + b.halfD + r;
+        if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ) {
+          const dL = pos.x - minX, dR = maxX - pos.x, dT = pos.z - minZ, dB = maxZ - pos.z, m = Math.min(dL, dR, dT, dB);
+          if (m === dL) pos.x = minX; else if (m === dR) pos.x = maxX; else if (m === dT) pos.z = minZ; else pos.z = maxZ;
+        }
+      }
+    }
+
+    // =========================================================================
+    // LOOP PRINCIPAL DE SIMULAÇÃO (60 FPS)
+    // =========================================================================
+    const clock = new THREE.Clock();
+    const desiredCam = new THREE.Vector3(), lookTarget = new THREE.Vector3();
+    const _skyCol = new THREE.Color(), _wCol = new THREE.Color();
+    const threatCtx = { playerX: 0, playerZ: 0, fastVehicles: [], chasingPolice: [], isNight: false, gameTime: 17.5, isWeekend: false, weather: 'clear' };
+    let fpsFrames = 0, fpsAccum = 0, currentFps = 60;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(0.05, clock.getDelta());
+      const elapsed = clock.elapsedTime;
+
+      if (hitStopTimer > 0) {
+        hitStopTimer = Math.max(0, hitStopTimer - dt);
+        if (camShake > 0.005) {
+          camera.position.x += (Math.random() - 0.5) * camShake;
+          camera.position.y += (Math.random() - 0.5) * camShake * 0.7;
+          camShake = Math.max(0, camShake - dt * 2.4);
+        }
+        renderer.render(scene, camera);
+        return;
+      }
+
+      // Relógio oficial: 1 dia = 20 minutos reais em 1x + Clima Dinâmico
+      gameTime += dt * (24 / 1200) * timeScale;
+      if (gameTime >= 24) { gameTime -= 24; dayNumber++; }
+      const isWeekend = ((dayNumber - 1) % 7) >= 5;
+      const isNight = gameTime >= 19.5 || gameTime < 5.5;
+      weatherEffects = weatherSystem.update(dt, playerPos.x, playerPos.z, isNight, timeScale);
+      audio.setRainLevel(weatherEffects.rainIntensity);
+
+      const skyHex = (gameTime >= 17 && gameTime < 19.5) ? 0xff5f8f : isNight ? 0x0b0f29 : (gameTime >= 5.5 && gameTime < 7.5) ? 0xff9a76 : 0x3ca3e8;
+      _skyCol.setHex(skyHex);
+      if (weatherEffects.skyTintAlpha > 0.005) _skyCol.lerp(_wCol.setHex(weatherEffects.skyTintHex), weatherEffects.skyTintAlpha);
+      if (weatherEffects.lightningBoost > 0.05) _skyCol.lerp(_wCol.setHex(0xdbeafe), Math.min(0.65, weatherEffects.lightningBoost * 0.25));
+      scene.background.lerp(_skyCol, 0.08);
+
+      scene.fog.color.copy(scene.background).multiplyScalar(0.55);
+      if (weatherEffects.fogTintAlpha > 0.005) scene.fog.color.lerp(_wCol.setHex(weatherEffects.fogTintHex), weatherEffects.fogTintAlpha);
+      scene.fog.density = weatherEffects.fogDensity;
+
+      sunLight.intensity = Math.max(0.22, (isNight ? 0.55 : SUN_INTENSITY) * weatherEffects.sunMultiplier) + weatherEffects.lightningBoost;
+      hemiLight.intensity = 0.9 * (1 - weatherEffects.rainIntensity * 0.22) + weatherEffects.lightningBoost * 0.45;
+      renderer.toneMappingExposure = weatherEffects.exposure;
+      roadMat.roughness = 0.82 - weatherEffects.wetness * 0.64;
+      roadMat.metalness = 0.08 + weatherEffects.wetness * 0.28;
+      promMat.roughness = 0.85 - weatherEffects.wetness * 0.54;
+      neonMats.forEach((m) => { m.emissiveIntensity = (isNight ? 2.3 : 1.2) * weatherEffects.neonMultiplier; });
+
+      const oPos = ocean.geometry.attributes.position;
+      for (let i = 0; i < oPos.count; i++) oPos.setY(i, oceanBaseY[i] + Math.sin(oPos.getX(i) * 0.09 + elapsed * 1.8) * 0.16);
+      oPos.needsUpdate = true;
+
+      if (currentCar) {
+        const throttle = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+        const steer = (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) - (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0);
+        const perf = 1 - currentCar.damageRatio * 0.45;
+        const grip = weatherEffects.grip;
+        const accel = currentCar.accel * perf * weatherEffects.accelMult;
+        if (throttle > 0) currentCar.speed += accel * dt;
+        else if (throttle < 0) currentCar.speed -= (currentCar.speed > 1 ? accel * 1.45 * weatherEffects.brakeMult : accel * 0.7) * dt;
+        else currentCar.speed = THREE.MathUtils.damp(currentCar.speed, 0, 2 * (0.65 + 0.35 * grip), dt);
+        currentCar.speed = THREE.MathUtils.clamp(currentCar.speed, -10, currentCar.maxSpeed * perf);
+
+        const turnAuth = 0.72 + 0.28 * grip;
+        currentCar.heading += steer * 2.1 * turnAuth * Math.min(1, Math.abs(currentCar.speed) / 7) * (currentCar.speed >= 0 ? 1 : -1) * dt;
+
+        let lat = currentCar.lateralSpeed || 0;
+        if (Math.abs(currentCar.speed) > 9 && weatherEffects.lateralDriftMult > 0.04 && Math.abs(steer) > 0) {
+          lat += steer * 0.45 * currentCar.speed * weatherEffects.lateralDriftMult * 1.65 * dt;
+        }
+        lat *= Math.exp(-dt * (2.5 + 9.0 * grip));
+        currentCar.lateralSpeed = THREE.MathUtils.clamp(lat, -9.5, 9.5);
+
+        currentCar.x += (Math.sin(currentCar.heading) * currentCar.speed + Math.cos(currentCar.heading) * currentCar.lateralSpeed) * dt;
+        currentCar.z += (Math.cos(currentCar.heading) * currentCar.speed - Math.sin(currentCar.heading) * currentCar.lateralSpeed) * dt;
+        playerPos.set(currentCar.x, 0, currentCar.z);
+        resolveCollisions(playerPos, 1.6);
+        currentCar.x = playerPos.x; currentCar.z = playerPos.z;
+        const gy = groundHeightAt(currentCar.x, currentCar.z);
+        currentCar.mesh.position.set(currentCar.x, gy, currentCar.z);
+        currentCar.mesh.rotation.y = currentCar.heading;
+        currentCar.wheels.forEach((w) => { w.rotation.x += (currentCar.speed * dt) / 0.36; });
+        if (!draggingCam) {
+          let diff = (currentCar.heading + Math.PI) - camYaw;
+          while (diff > Math.PI) diff -= Math.PI * 2; while (diff < -Math.PI) diff += Math.PI * 2;
+          camYaw += diff * (1 - Math.exp(-4.5 * dt));
+        }
+        desiredCam.set(currentCar.x + Math.sin(camYaw) * 9.5, gy + 4.2, currentCar.z + Math.cos(camYaw) * 9.5);
+        lookTarget.set(currentCar.x, gy + 1.4, currentCar.z);
+        document.getElementById('car-hud').style.display = 'block';
+        document.getElementById('car-name').textContent = currentCar.name;
+        document.getElementById('speed-display').textContent = `${Math.round(Math.abs(currentCar.speed) * 4.2)} km/h`;
+        const pct = Math.round((1 - currentCar.damageRatio) * 100);
+        document.getElementById('car-hp-txt').textContent = `${pct}%`;
+        document.getElementById('car-hp-fill').style.width = `${pct}%`;
+      } else {
+        const fwd = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+        const str = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+        const spd = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 11.4 : 6.4;
+        if (fwd !== 0 || str !== 0) {
+          const dx = -Math.sin(camYaw) * fwd + Math.cos(camYaw) * str, dz = -Math.cos(camYaw) * fwd - Math.sin(camYaw) * str;
+          const len = Math.hypot(dx, dz) || 1;
+          playerPos.x += (dx / len) * spd * dt; playerPos.z += (dz / len) * spd * dt;
+          resolveCollisions(playerPos, 0.55);
+          playerYaw = Math.atan2(dx, dz); walkTime += dt * (spd > 8 ? 14 : 9);
+          leftLeg.rotation.x = Math.sin(walkTime) * 0.55; rightLeg.rotation.x = -Math.sin(walkTime) * 0.55;
+        } else { leftLeg.rotation.x *= 0.85; rightLeg.rotation.x *= 0.85; }
+        playerVelY -= 21 * dt; playerPos.y += playerVelY * dt;
+        const fy = groundHeightAt(playerPos.x, playerPos.z);
+        if (playerPos.y <= fy) { playerPos.y = fy; playerVelY = 0; isGrounded = true; }
+        playerRig.position.copy(playerPos); playerRig.rotation.y = playerYaw;
+        desiredCam.set(playerPos.x + Math.sin(camYaw) * 6.2, playerPos.y + 2 + camPitch * 3.8, playerPos.z + Math.cos(camYaw) * 6.2);
+        lookTarget.set(playerPos.x, playerPos.y + 1.4, playerPos.z);
+        document.getElementById('car-hud').style.display = 'none';
+      }
+
+      camera.position.lerp(desiredCam, 1 - Math.exp(-10 * dt));
+      if (camShake > 0.005) {
+        camera.position.x += (Math.random() - 0.5) * camShake;
+        camera.position.y += (Math.random() - 0.5) * camShake * 0.7;
+        camShake = Math.max(0, camShake - dt * 2.4);
+      }
+      camera.lookAt(lookTarget);
+
+      // Tráfego NPC (com semáforos e fila), ônibus, SAMU e perseguição policial
+      let chasingCops = 0, minCopDist = Infinity;
+      threatCtx.fastVehicles.length = 0; threatCtx.chasingPolice.length = 0;
+      for (const v of vehicles) {
+        if (v !== currentCar) {
+          if (v.driver === 'police' && chasingCops < wantedStars) {
+            chasingCops++;
+            const dx = playerPos.x - v.x, dz = playerPos.z - v.z, d = Math.hypot(dx, dz);
+            if (d < minCopDist) minCopDist = d;
+            v.heading = Math.atan2(dx, dz); v.speed = d > 6 ? 19 + wantedStars * 2 : 5;
+            v.x += Math.sin(v.heading) * v.speed * dt; v.z += Math.cos(v.heading) * v.speed * dt;
+            if (v.redBar && v.blueBar) {
+              const fl = Math.sin(elapsed * 16) > 0;
+              v.redBar.material.emissiveIntensity = fl ? 3 : 0.2; v.blueBar.material.emissiveIntensity = fl ? 0.2 : 3;
+            }
+            v.mesh.position.set(v.x, 0, v.z); v.mesh.rotation.y = v.heading;
+            threatCtx.chasingPolice.push({ x: v.x, z: v.z });
+          } else if (v.driver === 'npc' || v.driver === 'police') {
+            const targetSpd = transit.computeSignalAndQueueSpeed(v, v.axis, v.dir, 11 * weatherEffects.npcTrafficSpeedMult);
+            v.speed = THREE.MathUtils.damp(v.speed, targetSpd, 4.5, dt);
+            v.heading = v.axis === 'z' ? (v.dir === 1 ? 0 : Math.PI) : (v.dir === 1 ? Math.PI / 2 : -Math.PI / 2);
+            if (v.axis === 'z') { v.z += v.dir * v.speed * dt; if (v.z > 124) v.z = -124; if (v.z < -124) v.z = 124; }
+            else { v.x += v.dir * v.speed * dt; if (v.x > 42) v.x = -124; if (v.x < -124) v.x = 42; }
+            v.mesh.position.set(v.x, groundHeightAt(v.x, v.z), v.z); v.mesh.rotation.y = v.heading;
+            v.wheels.forEach((w) => { w.rotation.x += (v.speed * dt) / 0.36; });
+          }
+        }
+        if (Math.abs(v.speed) >= 13.5) threatCtx.fastVehicles.push({ x: v.x, z: v.z, vx: Math.sin(v.heading) * v.speed, vz: Math.cos(v.heading) * v.speed });
+      }
+
+      if (wantedStars > 0) {
+        if (minCopDist > 46) { evadeTimer += dt; if (evadeTimer > 9) { wantedStars = 0; evadeTimer = 0; money += 200; showToast('Polícia despistada! +$200'); } }
+        else if (minCopDist < 5.5 && (!currentCar || Math.abs(currentCar.speed) < 4.5)) {
+          if ((bustTimer += dt) > 2.5) {
+            wantedStars = 0; bustTimer = 0; money = Math.max(0, money - 150);
+            if (currentCar) { currentCar.driver = 'none'; currentCar = null; playerRig.visible = true; }
+            playerPos.set(-42, 0, -16); showToast('PRESO! Multa -$150');
+          }
+        } else bustTimer = 0;
+      }
+
+      if (activeMission === 'm1' && missionStep === 2 && currentCar === missionCar && Math.hypot(playerPos.x - 48, playerPos.z - 48) < 5.5) {
+        money += 1500; wantedStars = 0; activeMission = 'none'; beacon.visible = false; showToast('MISSÃO 1 CONCLUÍDA! +$1.500');
+      } else if (activeMission === 'm2') {
+        if (missionStep === 1 && Math.hypot(playerPos.x - 68, playerPos.z + 56) < 3.5) {
+          missionStep = 2; targetPos = { x: 14, z: -24 }; beacon.position.set(14, 4, -24); wantedStars = Math.max(wantedStars, 2); showToast('Maleta coletada!');
+        } else if (missionStep === 2 && Math.hypot(playerPos.x - 14, playerPos.z + 24) < 4.5) {
+          money += 2500; wantedStars = 0; activeMission = 'none'; beacon.visible = false; showToast('MISSÃO 2 CONCLUÍDA! +$2.500');
+        }
+      }
+
+      // Atualiza Multidão (600 pool / 150-250 visíveis), Ônibus, Ambulância/Paramédicos, Impactos e Ragdolls
+      threatCtx.playerX = playerPos.x; threatCtx.playerZ = playerPos.z;
+      threatCtx.gameTime = gameTime; threatCtx.isWeekend = isWeekend; threatCtx.isNight = isNight;
+      threatCtx.weather = weatherEffects.current;
+      crowd.update(dt, threatCtx, camera);
+      transit.update(dt, elapsed);
+
+      const imp = impact.update(dt, vehicles, currentCar, playerPos, crowd, ragdolls);
+      if (imp.hitStop > 0) hitStopTimer = Math.max(hitStopTimer, imp.hitStop);
+      if (imp.shake > 0) camShake = Math.max(camShake, imp.shake);
+      if (imp.sfx) { audio.playImpact(imp.strength); audio.playStars(); }
+      if (imp.wanted > 0) { wantedStars = Math.min(3, Math.max(wantedStars, imp.wanted)); if (imp.msg) showToast(imp.msg); }
+
+      ragdolls.update(
+        dt, buildings,
+        (npcIdx, rx, rz) => { const a = crowd.agents[npcIdx]; a.ragdollActive = false; a.x = rx; a.z = rz; a.y = groundHeightAt(rx, rz); a.injuryStatus = 'injured'; a.injuredTimer = 0; a.visuallyActive = true; a.triggerFlee(playerPos.x, playerPos.z); },
+        (npcIdx) => { const a = crowd.agents[npcIdx]; a.ragdollActive = false; a.injuryStatus = 'out'; a.visuallyActive = false; },
+        (rag) => impact.handleRagdollHitsNpc(rag, crowd, ragdolls)
+      );
+      if (showColliders) registry.updateDynamicColliders(vehicles, crowd.colliderBuffer);
+
+      renderer.render(scene, camera);
+      if (showRoutineLabels) {
+        if (labelsCanvas.width !== window.innerWidth || labelsCanvas.height !== window.innerHeight) {
+          labelsCanvas.width = window.innerWidth; labelsCanvas.height = window.innerHeight;
+        }
+        crowd.drawRoutineLabels(labelsCtx, camera, labelsCanvas.width, labelsCanvas.height, playerPos.x, playerPos.z);
+      }
+
+      // HUD, Relógio, Debug (F3) e Minimapa
+      fpsFrames++; fpsAccum += dt;
+      if (fpsAccum >= 0.5) { currentFps = Math.round(fpsFrames / fpsAccum); fpsFrames = 0; fpsAccum = 0; }
+      const totalMin = Math.floor(gameTime * 60) % 1440;
+      const clockStr = `${String(Math.floor(totalMin / 60)).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
+      const periodLbl = (gameTime >= 17 && gameTime < 19.5) ? 'Pôr do Sol' : isNight ? 'Noite Neon' : (gameTime >= 5.5 && gameTime < 7.5) ? 'Amanhecer' : 'Dia Tropical';
+
+      if (showDebugPanel) {
+        document.getElementById('dbg-fps').textContent = currentFps;
+        document.getElementById('dbg-npcs').textContent = `${crowd.activeCount} / ${crowd.maxVisibleNpcs}`;
+        document.getElementById('dbg-bg').textContent = crowd.backgroundCount;
+        document.getElementById('dbg-inside').textContent = crowd.insideCount;
+        document.getElementById('dbg-lod').textContent = `${crowd.lodSystem.counts.full} / ${crowd.lodSystem.counts.mid} / ${crowd.lodSystem.counts.low}`;
+        document.getElementById('dbg-ragdolls').textContent = `${ragdolls.inUseCount} / ${RAGDOLL_POOL_SIZE}`;
+        document.getElementById('dbg-injured').textContent = `${crowd.activeInjuredCount} / ${transit.totalRescued}`;
+        const alertBadge = document.getElementById('dbg-zone-alert');
+        alertBadge.style.display = crowd.zoneDensity.alerts.length > 0 ? 'inline-block' : 'none';
+        document.getElementById('dbg-zones').innerHTML = ALL_ZONE_IDS.map((zid) => {
+          const cnt = crowd.zoneDensity.zoneCounts[zid], lim = crowd.zoneDensity.zoneLimits[zid], over = cnt > lim;
+          return `<div class="dbg-row"><span class="dbg-lbl">${ZONE_LABELS[zid]}</span><span class="dbg-val" style="color:${over ? '#fb7185' : '#e2e8f0'}">${cnt}/${lim}</span></div>`;
+        }).join('');
+      }
+      document.getElementById('money-display').textContent = `$ ${money.toLocaleString('pt-BR')}`;
+      document.getElementById('clock-display').textContent = `${clockStr} · ${periodLbl}`;
+      document.getElementById('day-display').textContent = `Dia ${dayNumber} · ${isWeekend ? 'Fim de Semana' : 'Dia Útil'} (${timeScale}x)`;
+      document.getElementById('weather-display').textContent = `${weatherEffects.label} · Pista ${Math.round(weatherEffects.grip * 100)}%`;
+      const sigEl = document.getElementById('signal-display');
+      const sigLbl = crowd.graph.getSignalLabel();
+      sigEl.textContent = sigLbl;
+      sigEl.style.color = sigLbl.includes('Limpeza') ? '#fbbf24' : '#22f59a';
+      document.getElementById('bus-display').textContent = `${transit.getTotalPassengers()} embarcado(s)`;
+      const samuEl = document.getElementById('samu-display');
+      const samuLbl = transit.getAmbLabel();
+      samuEl.textContent = samuLbl;
+      samuEl.style.color = samuLbl === 'A caminho' ? '#f87171' : samuLbl === 'Atendendo' ? '#fbbf24' : '#38bdf8';
+      [...document.getElementById('stars-display').children].forEach((el, i) => { el.className = i < wantedStars ? 'star-on' : 'star-off'; });
+      document.getElementById('enter-prompt').style.display = (!currentCar && vehicles.some((v) => Math.hypot(v.x - playerPos.x, v.z - playerPos.z) < 4.8)) ? 'block' : 'none';
+
+      minimapCtx.fillStyle = '#0d1530'; minimapCtx.fillRect(0, 0, 156, 156);
+      const sc = 0.6, toX = (wx) => 78 + (wx - playerPos.x) * sc, toY = (wz) => 78 + (wz - playerPos.z) * sc;
+      minimapCtx.fillStyle = '#24213b'; minimapCtx.fillRect(0, 0, Math.max(0, toX(56)), 156);
+      minimapCtx.fillStyle = '#c89e69'; minimapCtx.fillRect(toX(56), 0, 14, 156);
+      minimapCtx.fillStyle = '#0b4f78'; minimapCtx.fillRect(toX(78), 0, 156, 156);
+      minimapCtx.fillStyle = '#3c3e5e';
+      ROAD_X.forEach((rx) => minimapCtx.fillRect(toX(rx) - 4, 0, 8, 156));
+      ROAD_Z.forEach((rz) => minimapCtx.fillRect(0, toY(rz) - 4, toX(56), 8));
+      minimapCtx.fillStyle = '#605288';
+      buildings.forEach((b) => minimapCtx.fillRect(toX(b.x - b.halfW), toY(b.z - b.halfD), b.halfW * 2 * sc, b.halfD * 2 * sc));
+      minimapCtx.fillStyle = '#38bdf8';
+      WORLD_POIS.busStops.forEach((bs) => minimapCtx.fillRect(toX(bs.x) - 2, toY(bs.z) - 2, 4, 4));
+      if (targetPos) { minimapCtx.fillStyle = '#facc15'; minimapCtx.beginPath(); minimapCtx.arc(toX(targetPos.x), toY(targetPos.z), 4.5, 0, Math.PI * 2); minimapCtx.fill(); }
+      vehicles.forEach((v) => {
+        if (v === currentCar) return;
+        const px = toX(v.x), py = toY(v.z);
+        if (v.type === 'bus') { minimapCtx.fillStyle = '#fbbf24'; minimapCtx.fillRect(px - 3, py - 3, 6, 6); }
+        else if (v.type === 'ambulance') { minimapCtx.fillStyle = '#ffffff'; minimapCtx.fillRect(px - 3, py - 3, 6, 6); minimapCtx.fillStyle = '#ef4444'; minimapCtx.fillRect(px - 1, py - 2.5, 2, 5); minimapCtx.fillRect(px - 2.5, py - 1, 5, 2); }
+        else { minimapCtx.fillStyle = v.driver === 'police' ? '#ef4444' : '#94a3b8'; minimapCtx.fillRect(px - 2, py - 2, 4, 4); }
+      });
+      minimapCtx.fillStyle = '#ffffff'; minimapCtx.beginPath(); minimapCtx.arc(78, 78, 4, 0, Math.PI * 2); minimapCtx.fill();
+    }
+    animate();
+  </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "Baía Solara 3D",
+  "description": "Protótipo 3D low-poly de mundo aberto em cidade litorânea com ciclo dia/noite neon, veículos dirigíveis, sistema de procurado e missões.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
